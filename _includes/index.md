@@ -13,7 +13,11 @@ body {
 }
 
 section.title {
-    position: relative;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
     font-family: 'Montserrat', Arial, sans-serif;
     font-size: calc(20px + 5vw);
     font-weight: 700;
@@ -29,8 +33,8 @@ section.title {
 
 section.title span {
     position: absolute;
-    top: 0;
-    left: 0;
+    top: 50%;
+    left: 50%;
     transform: translate(-50%, -50%);
 }
 
