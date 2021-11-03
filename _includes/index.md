@@ -62,18 +62,18 @@
       }
   }
 
-  @media (min-width: 1000px) and (orientation: landscape) {
-      .container::before {
+    .container::before {
         content: ' ';
         background-image: url('{{ site.baseurl }}/assets/img/dark-deals-c1-world-background.jpg');
         background-size: cover;
         background-position: center;
-        width: 100%;
-        height: 100%;
         position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         opacity: .5;
-      }
-  }
+    }
 </style>
 
 <section class="title"><span>dark deals</span></section>
