@@ -67,6 +67,7 @@
         content: ' ';
         background-image: url('{{ site.baseurl }}/assets/img/dark-deals-c1-world-background.jpg');
         background-size: cover;
+        background-position: center;
         width: 100%;
         height: 100%;
         position: absolute;
