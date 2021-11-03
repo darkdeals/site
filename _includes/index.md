@@ -10,10 +10,9 @@
 
   section.title {
       position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      right: 0;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
       font-family: 'Montserrat', Arial, sans-serif;
       font-size: calc(20px + 5vw);
       font-weight: 700;
@@ -24,15 +23,11 @@
       user-select: none;
       -webkit-user-select: none;
       white-space: nowrap;
-      filter: blur(0.007em);
-      animation: shake 2.5s linear forwards infinite;
   }
 
-  section.title span {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
+  section.title .shake {
+      filter: blur(0.007em);
+      animation: shake 2.5s linear forwards infinite;
   }
 
   @keyframes shake {
@@ -76,4 +71,6 @@
     }
 </style>
 
-<section class="title"><span>dark deals</span></section>
+<section class="title">
+    <div class="shake">dark deals</div>
+</section>
