@@ -16,6 +16,7 @@
       font-family: 'Montserrat', Arial, sans-serif;
       font-size: calc(20px + 5vw);
       font-weight: 700;
+      text-align: center;
       color: #fff;
       letter-spacing: 0.02em;
       text-transform: uppercase;
@@ -28,6 +29,10 @@
   section.title .shake {
       filter: blur(0.007em);
       animation: shake 2.5s linear forwards infinite;
+  }
+
+  section.title .subtitle {
+      font-size: .2em;
   }
 
   @keyframes shake {
@@ -73,4 +78,5 @@
 
 <section class="title">
     <div class="shake">dark deals</div>
+    <div class="subtitle">A story of intrigue and guile set in a land on the brink</div>
 </section>
