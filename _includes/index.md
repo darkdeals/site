@@ -4,8 +4,8 @@
   /* Animation based on https://codepen.io/GeorgePark/pen/jeBbGN */
 
   body {
-      background-color: #000;
       overflow: hidden;
+      background-color: #000;
   }
 
   section.title {
@@ -59,6 +59,18 @@
       100% {
           filter: blur(0.007em);
           transform: translate(0) rotate(-0.5deg);
+      }
+  }
+
+  @media (min-width: 1000px) and (orientation: landscape) {
+      .container::before {
+        content: ' ';
+        background-image: url('{{ site.baseurl }}/assets/img/dark-deals-c1-world-background.jpg');
+        background-size: cover;
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        opacity: .3;
       }
   }
 </style>

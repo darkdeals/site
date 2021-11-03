@@ -7,6 +7,21 @@ collections:
   pages:
     output: true
     permalink: /:path/
+  # c1_session_notes:
+  #   output: true
+  #   sort_by: date
+  #   permalink: /c1/session_notes/:path/
+  # c1_lore:
+  #   output: true
+  #   permalink: /c1/lore/:path/
+  # c1_locations:
+  #   output: true
+  #   sort_by: region
+  #   permalink: /c1/location/:path/
+  # c1_characters:
+  #   output: true
+  #   sort_by: name
+  #   permalink: /c1/character/:path/
 
 # Title
 name: Dark Deals
