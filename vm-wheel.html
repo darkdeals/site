@@ -515,7 +515,7 @@
                         // Font Size Logic
                         // forceDetail = inside the lens. We need smaller relative font because scale is huge.
                         let fontSize = forceDetail ? 14 : (len > 40 ? 12 : 18);
-                        if(len > 100 && !forceDetail) fontSize = 0; // Hide on main wheel if too many
+                        if((len > 100 && !forceDetail) || len > 200) fontSize = 0; // Hide on main wheel if too many
 
                         if (fontSize > 0) {
                             context.font = `bold ${fontSize}px Inter`;
