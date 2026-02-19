@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viewer Suggestions Wheel</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        :root {
+            --gold: #FFD700;
+            --dark-bg: #050505;
+        }
+
+        body {
+            background-color: var(--dark-bg);
+            background-image: 
+                radial-gradient(circle at 50% 0%, #1a1a1a 0%, transparent 70%),
+                linear-gradient(0deg, #000 0%, #0a0a0a 100%);
+            font-family: 'Inter', sans-serif;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        /* Typography */
+        h1, h2, h3, .casino-font { font-family: 'Cinzel', serif; letter-spacing: 1px; }
+        .mono-font { font-family: 'JetBrains Mono', monospace; }
+
+        /* Gold UI Border Effect */
+        .gold-border {
+            position: relative;
+            background: #0f0f0f;
+            border: 1px solid #333;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.9);
+        }
+        .gold-border::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(45deg, #b88a44, #fceeb5, #b88a44);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        /* Buttons */
+        .shiny-btn {
+            background: linear-gradient(180deg, #d4af37 0%, #aa8a2e 100%);
+            color: #000;
+            font-weight: 800;
+            text-transform: uppercase;
+            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
+            border: none;
+        }
+        .shiny-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            background: linear-gradient(180deg, #edd170 0%, #c4a038 100%);
+            box-shadow: 0 6px 20px rgba(212, 175, 55, 0.5);
+        }
+        .shiny-btn:disabled {
+            filter: grayscale(1);
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Wheel Container */
+        .wheel-container {
+            position: relative;
+            filter: drop-shadow(0 20px 30px rgba(0,0,0,0.8));
+        }
+        
+        .pointer-marker {
+            width: 0; 
+            height: 0; 
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 45px solid #ff4444;
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            filter: drop-shadow(0 4px 4px rgba(0,0,0,0.8));
+        }
+
+        /* Animations */
+        .list-enter-active, .list-leave-active { transition: all 0.5s ease; }
+        .list-enter-from, .list-leave-to { opacity: 0; transform: translateX(20px); }
+
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: var(--gold);
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #333;
+            border-radius: 2px;
+        }
+
+        /* Inputs & Utilities */
+        .mult-loss { color: #ff4444; }
+        .mult-win { color: #4ade80; }
+        .mult-big { color: var(--gold); text-shadow: 0 0 10px rgba(255, 215, 0, 0.6); }
+
+        .input-dark {
+            background: #000;
+            border: 1px solid #333;
+            color: white;
+            transition: border-color 0.2s;
+        }
+        .input-dark:focus {
+            outline: none;
+            border-color: var(--gold);
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="min-h-screen flex flex-col p-4 md:p-6 max-w-[1600px] mx-auto">
+
+    <header class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-800 pb-4 gap-4">
+        <div class="flex items-center gap-4">
+            <div class="bg-gradient-to-br from-yellow-600 to-yellow-800 text-black font-bold p-2 rounded text-2xl">🎰</div>
+            <div>
+                <h1 class="text-2xl md:text-3xl text-white font-bold leading-none">Chanced.com/VegasMatt</h1>
+                <p class="text-gray-500 text-xs tracking-wider uppercase">Viewer Suggestions Wheel</p>
+            </div>
+        </div>
+        
+        <div class="flex flex-wrap justify-center md:justify-end items-center gap-4">
+            
+            <div class="flex flex-col items-end mr-2">
+                <div class="flex justify-between w-32 mb-1">
+                    <label class="text-[10px] text-gray-400 uppercase font-bold">Spin Time</label>
+                    <span class="text-[10px] text-yellow-500 font-mono">{{ spinDuration }}s</span>
+                </div>
+                <input type="range" min="1" max="15" step="1" v-model.number="spinDuration" class="w-32">
+            </div>
+
+            <div class="h-8 w-px bg-gray-800 mx-2 hidden md:block"></div>
+
+            <div class="bg-gray-900 px-4 py-2 rounded border border-gray-700 text-xs text-center">
+                <span class="text-gray-400 block uppercase text-[10px]">Games</span>
+                <span class="text-white font-bold text-lg mono-font leading-none">{{ wheelItems.length }}</span>
+            </div>
+
+            <button @click="showImport = true" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded transition text-xs font-bold uppercase tracking-wide border border-gray-600">
+                Import CSV
+            </button>
+            <button @click="confirmReset" class="px-4 py-2 bg-red-900/20 hover:bg-red-900/40 text-red-500 border border-red-900/50 rounded transition text-xs font-bold uppercase tracking-wide">
+                Reset
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <div class="lg:col-span-7 flex flex-col items-center justify-start pt-2 relative">
+            
+            <div class="wheel-container mb-8 w-full max-w-[650px] aspect-square relative flex items-center justify-center">
+                
+                <div class="pointer-marker"></div>
+                
+                <canvas 
+                    ref="wheelCanvas" 
+                    width="800" 
+                    height="800" 
+                    class="w-full h-full rounded-full border-4 border-gray-800 bg-[#0a0a0a] shadow-2xl cursor-pointer"
+                    @click="spinWheel"
+                ></canvas>
+
+                <div v-if="currentStage !== 'active'" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-16 h-16 md:w-24 md:h-24 bg-gradient-to-b from-gray-700 to-black rounded-full border-4 border-[#b88a44] shadow-xl flex items-center justify-center z-10 pointer-events-none transition-opacity duration-300">
+                    <span class="text-2xl md:text-4xl filter drop-shadow-lg">🎲</span>
+                </div>
+
+                <div v-if="currentStage === 'active'" class="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-[2px] rounded-full fade-in">
+                    
+                    <div class="gold-border p-6 rounded-xl w-[85%] max-w-sm bg-[#111] text-center shadow-2xl mt-40">
+                        <h3 class="text-gray-500 text-[10px] uppercase tracking-[0.2em] mb-1">Game Selected</h3>
+                        <h2 class="text-2xl font-bold text-white mb-1 casino-font text-shadow truncate px-2">{{ selectedItem.game }}</h2>
+                        <div class="text-xs text-yellow-500 mb-6 font-bold uppercase tracking-wide">
+                            Viewer: {{ selectedItem.viewer }}
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 mb-5">
+                            <div class="text-left group">
+                                <label class="block text-[10px] text-gray-400 mb-1 uppercase">Bet Amount</label>
+                                <div class="relative">
+                                    <span class="absolute left-2 top-2 text-gray-500 text-sm">SC</span>
+                                    <input v-model.number="resultForm.cost" type="number" class="w-full input-dark pl-10 p-2 rounded text-lg mono-font" placeholder="0">
+                                </div>
+                            </div>
+                            <div class="text-left group">
+                                <label class="block text-[10px] text-gray-400 mb-1 uppercase">Total Win</label>
+                                <div class="relative">
+                                    <span class="absolute left-2 top-2 text-gray-500 text-sm">SC</span>
+                                    <input v-model.number="resultForm.win" type="number" class="w-full input-dark pl-10 p-2 rounded text-lg mono-font" placeholder="0">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-center bg-black/60 rounded p-2 border border-gray-800 mb-5">
+                            <span class="text-gray-500 text-xs uppercase tracking-wide">Multiplier Result</span>
+                            <span class="font-bold mono-font" :class="previewMultiplierClass">{{ previewMultiplier }}</span>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button @click="skipGame" class="flex-1 py-3 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded font-bold transition text-xs uppercase">
+                                Skip
+                            </button>
+                            <button @click="confirmResult" class="flex-[2] py-3 shiny-btn rounded font-bold text-xs uppercase tracking-wide text-black">
+                                Confirm Win
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="currentStage === 'idle'" class="text-center w-full max-w-md">
+                <button 
+                    @click="spinWheel" 
+                    :disabled="wheelItems.length === 0"
+                    class="shiny-btn w-full py-4 rounded-xl text-xl md:text-2xl tracking-widest shadow-yellow-500/20">
+                    SPIN WHEEL
+                </button>
+                <p v-if="wheelItems.length === 0" class="mt-4 text-gray-500 text-xs uppercase tracking-widest">Import CSV to begin</p>
+            </div>
+
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col h-[500px] lg:h-[calc(100vh-150px)]">
+            <div class="bg-[#0f0f0f] border border-gray-800 rounded-xl flex flex-col h-full shadow-2xl overflow-hidden relative">
+                <div class="p-4 bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f] border-b border-gray-800 flex justify-between items-center z-10">
+                    <h2 class="text-lg text-white casino-font flex items-center gap-2">
+                        <span class="text-yellow-500">🏆</span> Leaderboard
+                    </h2>
+                    <span class="text-[10px] text-gray-500 font-mono bg-black px-2 py-1 rounded border border-gray-800">RANK BY MULTIPLIER</span>
+                </div>
+                
+                <div class="flex-grow overflow-y-auto p-2 scrollbar-thin">
+                    <transition-group name="list" tag="div" class="space-y-1">
+                        <div v-for="(entry, index) in sortedLeaderboard" :key="entry.id" 
+                             class="p-3 rounded bg-[#161616] border border-gray-800/50 hover:border-gray-600 transition flex items-center justify-between group">
+                            
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 flex items-center justify-center rounded bg-black border border-gray-800 font-black text-sm casino-font" 
+                                     :class="getRankColor(index)">
+                                    {{ index + 1 }}
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="font-bold text-white text-sm group-hover:text-yellow-500 transition truncate max-w-[120px]">{{ entry.game }}</span>
+                                    <span class="text-[10px] text-gray-500 uppercase tracking-wider">{{ entry.viewer }}</span>
+                                </div>
+                            </div>
+
+                            <div class="text-right">
+                                <div class="text-lg font-bold mono-font" :class="getMultiplierColor(entry.multiplier)">
+                                    {{ entry.multiplier.toFixed(2) }}x
+                                </div>
+                                <div class="text-[10px] text-gray-600 mono-font">
+                                    {{ formatNumber(entry.win) }} / {{ formatNumber(entry.cost) }}
+                                </div>
+                            </div>
+                        </div>
+                    </transition-group>
+
+                    <div v-if="leaderboard.length === 0" class="h-full flex flex-col items-center justify-center text-gray-700">
+                        <div class="text-5xl mb-4 opacity-20">📊</div>
+                        <p class="text-sm">No games played yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div v-if="showImport" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-[#111] border border-gray-700 rounded-xl p-6 w-full max-w-lg shadow-2xl relative">
+            <h3 class="text-xl font-bold text-white mb-2 casino-font">Import Suggestions</h3>
+            <p class="text-xs text-gray-400 mb-4">Paste CSV format (Game, Viewer).</p>
+            
+            <textarea 
+                v-model="importText" 
+                class="w-full h-64 bg-black border border-gray-800 rounded p-4 text-gray-300 mono-font text-xs focus:border-yellow-600 focus:outline-none resize-none leading-relaxed"
+                placeholder="Sweet Bonanza, JohnDoe&#10;Gates of Olympus, JaneSmith&#10;Sugar Rush, Bob"></textarea>
+            
+            <div class="flex justify-between items-center mt-4">
+                <span class="text-xs text-gray-500">{{ importLineCount }} entries detected</span>
+                <div class="flex gap-3">
+                    <button @click="showImport = false" class="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
+                    <button @click="processImport" class="px-6 py-2 bg-yellow-700 hover:bg-yellow-600 text-white rounded font-bold text-sm transition">Import Data</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+
+    createApp({
+        setup() {
+            // --- State ---
+            const wheelItems = ref([]);
+            const leaderboard = ref([]);
+            const currentStage = ref('idle'); // idle, spinning, active
+            const selectedItem = ref(null);
+            const spinDuration = ref(5); // Seconds
+            
+            // Modal State
+            const showImport = ref(false);
+            const importText = ref('');
+            
+            // Result Form
+            const resultForm = ref({ cost: null, win: null });
+
+            // Canvas & Animation
+            const wheelCanvas = ref(null);
+            let ctx = null;
+            let currentAngle = 0; 
+            let spinSpeed = 0;
+            let friction = 0.99;    
+            let rafId = null;
+
+            // Colors
+            const getSliceColor = (index, total) => {
+                const hue = (index * 137.508) % 360; 
+                return `hsl(${hue}, 65%, 45%)`;
+            };
+
+            // --- Persistence ---
+            onMounted(() => {
+                const savedItems = localStorage.getItem('casino_wheel_final_items');
+                const savedLeaderboard = localStorage.getItem('casino_leaderboard_final');
+                
+                if (savedItems) wheelItems.value = JSON.parse(savedItems);
+                if (savedLeaderboard) leaderboard.value = JSON.parse(savedLeaderboard);
+
+                window.addEventListener('resize', fitCanvas);
+                nextTick(() => {
+                    fitCanvas();
+                    initWheel();
+                });
+            });
+
+            watch([wheelItems, leaderboard], () => {
+                localStorage.setItem('casino_wheel_final_items', JSON.stringify(wheelItems.value));
+                localStorage.setItem('casino_leaderboard_final', JSON.stringify(leaderboard.value));
+                drawWheel();
+            }, { deep: true });
+
+            // --- Computed ---
+            const sortedLeaderboard = computed(() => {
+                return [...leaderboard.value].sort((a, b) => b.multiplier - a.multiplier);
+            });
+
+            const importLineCount = computed(() => {
+                return importText.value.split('\n').filter(l => l.trim().length > 0).length;
+            });
+
+            const previewMultiplier = computed(() => {
+                const c = resultForm.value.cost;
+                const w = resultForm.value.win;
+                if (!c || c <= 0) return "0.00x";
+                return (w / c).toFixed(2) + 'x';
+            });
+
+            const previewMultiplierClass = computed(() => {
+                const c = resultForm.value.cost;
+                const w = resultForm.value.win;
+                if(!c) return 'text-gray-500';
+                const m = w/c;
+                if(m < 1) return 'text-red-500';
+                if(m >= 10) return 'text-yellow-400';
+                return 'text-green-400';
+            });
+
+            // --- Core Logic ---
+
+            const fitCanvas = () => {
+                if(!wheelCanvas.value) return;
+                const dpr = window.devicePixelRatio || 1;
+                
+                // Set logic dimensions
+                wheelCanvas.value.width = 800 * dpr;
+                wheelCanvas.value.height = 800 * dpr;
+                
+                ctx = wheelCanvas.value.getContext('2d');
+                ctx.scale(dpr, dpr); 
+                drawWheel();
+            };
+
+            const initWheel = () => {
+                fitCanvas();
+                drawWheel();
+            };
+
+            const processImport = () => {
+                const lines = importText.value.split('\n');
+                let newItems = [];
+                let count = 0;
+                
+                lines.forEach(line => {
+                    const parts = line.split(',');
+                    if (parts.length >= 1 && line.trim() !== "") {
+                        newItems.push({
+                            id: Date.now() + Math.random(),
+                            game: parts[0].trim(),
+                            viewer: parts[1] ? parts[1].trim() : 'Anonymous',
+                        });
+                        count++;
+                    }
+                });
+
+                wheelItems.value = [...wheelItems.value, ...newItems];
+                importText.value = '';
+                showImport.value = false;
+                
+                if(count > 0) triggerConfetti({ particleCount: 60, spread: 60, origin: { y: 0.6 } });
+            };
+
+            // --- The Rendering Engine ---
+            const drawWheel = () => {
+                if (!ctx || !wheelCanvas.value) return;
+                
+                const width = 800;
+                const height = 800;
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const radius = (width / 2) - 20;
+
+                // 1. Clear
+                ctx.clearRect(0, 0, width, height);
+                
+                // 2. Draw Main Wheel 
+                // Optimization: If spinning fast & > 50 items, do not render text
+                const isFastSpin = spinSpeed > 0.05;
+                const showDetails = !isFastSpin;
+                drawWheelSlices(ctx, centerX, centerY, radius, currentAngle, 1, showDetails, false);
+
+                // 3. Draw Magnifier Lens (Glass)
+                // Render if slowed down significantly or stopped
+                const isSlow = (spinSpeed < 0.08 && currentStage.value === 'spinning');
+                const isStopped = currentStage.value === 'active';
+
+                if (isSlow || isStopped) {
+                    drawMagnifier(ctx, centerX, centerY, radius);
+                }
+            };
+
+            const drawWheelSlices = (context, cx, cy, r, rotation, scale, showText, forceDetail) => {
+                const len = wheelItems.value.length;
+                if (len === 0) return;
+
+                const arcSize = (2 * Math.PI) / len;
+
+                context.save();
+                context.translate(cx, cy);
+                context.scale(scale, scale);
+                context.rotate(rotation);
+
+                wheelItems.value.forEach((item, i) => {
+                    const startAngle = i * arcSize;
+                    const endAngle = startAngle + arcSize;
+
+                    context.beginPath();
+                    context.moveTo(0, 0);
+                    context.arc(0, 0, r, startAngle, endAngle);
+                    context.fillStyle = getSliceColor(i, len);
+                    context.fill();
+                    context.strokeStyle = 'rgba(0,0,0,0.2)';
+                    context.lineWidth = 1;
+                    context.stroke();
+
+                    // Text Rendering
+                    if (showText || (len < 60 && !forceDetail) || forceDetail) {
+                        context.save();
+                        context.rotate(startAngle + arcSize / 2);
+                        context.textAlign = "right";
+                        context.fillStyle = "white";
+                        
+                        // Font Size Logic
+                        // forceDetail = inside the lens. We need smaller relative font because scale is huge.
+                        let fontSize = forceDetail ? 14 : (len > 40 ? 12 : 18);
+                        if(len > 100 && !forceDetail) fontSize = 0; // Hide on main wheel if too many
+
+                        if (fontSize > 0) {
+                            context.font = `bold ${fontSize}px Inter`;
+                            context.shadowColor = "black";
+                            context.shadowBlur = forceDetail ? 2 : 4;
+                            
+                            let text = item.game;
+                            // Less truncation in magnifier
+                            const maxLen = forceDetail ? 30 : 20;
+                            if(text.length > maxLen) text = text.substring(0, maxLen-1) + '…';
+                            
+                            context.fillText(text, r - 20, fontSize/3);
+                        }
+                        context.restore();
+                    }
+                });
+
+                // Center Hub
+                context.beginPath();
+                context.arc(0, 0, 10, 0, 2 * Math.PI);
+                context.fillStyle = '#111';
+                context.fill();
+
+                context.restore();
+                
+                // Outer Ring
+                if (scale === 1) {
+                    context.beginPath();
+                    context.arc(cx, cy, r, 0, 2 * Math.PI);
+                    context.lineWidth = 15;
+                    context.strokeStyle = '#b88a44';
+                    context.stroke();
+                }
+            };
+
+            const drawMagnifier = (context, cx, cy, r) => {
+                const lensRadius = 140;
+                const lensX = cx;
+                const lensY = cy - r + lensRadius - 40; 
+
+                context.save();
+
+                // 1. Clipping Path
+                context.beginPath();
+                context.arc(lensX, lensY, lensRadius, 0, 2 * Math.PI);
+                context.clip();
+
+                // 2. Background
+                context.fillStyle = '#1a1a1a';
+                context.fill();
+
+                // 3. Render Wheel (Zoomed)
+                // We want the area at the TOP of the wheel (Pointer) to be in the center of the lens.
+                const magScale = 3.5;
+                const dpr = window.devicePixelRatio || 1; 
+
+                // We need to translate/scale to bring the top of the wheel to lens center
+                context.translate(lensX, lensY);
+                context.scale(magScale, magScale);
+                context.translate(-lensX, - (cy - r + 30)); // Offset to align top edge
+
+                // Draw with forceDetail=true to ensure text renders
+                drawWheelSlices(context, cx, cy, r, currentAngle, 1, true, true);
+
+                context.restore();
+
+                // 4. Lens Border
+                context.beginPath();
+                context.arc(lensX, lensY, lensRadius, 0, 2 * Math.PI);
+                context.lineWidth = 6;
+                context.strokeStyle = '#FFD700'; 
+                context.stroke();
+                
+                // Shine effect
+                context.beginPath();
+                context.arc(lensX, lensY, lensRadius - 10, -0.2, 1.2 * Math.PI);
+                context.strokeStyle = "rgba(255,255,255,0.1)";
+                context.lineWidth = 10;
+                context.stroke();
+            };
+
+            // --- Animation Logic ---
+
+            const spinWheel = () => {
+                if (currentStage.value !== 'idle' || wheelItems.value.length === 0) return;
+                
+                currentStage.value = 'spinning';
+                
+                // PHYSICS CALCULATION
+                // We want to stop in approx 'spinDuration' seconds.
+                // Physics model: speed *= friction per frame (60fps).
+                // Initial Speed: ~0.8 rad/frame (Fast)
+                // Target End Speed: 0.001 rad/frame (Stop)
+                // Frames n = duration * 60
+                // Formula: start * friction^n = end -> friction = (end/start)^(1/n)
+                
+                const startSpeed = 0.8;
+                const endSpeed = 0.001;
+                const durationFrames = spinDuration.value * 60;
+                
+                spinSpeed = startSpeed;
+                friction = Math.pow(endSpeed / startSpeed, 1 / durationFrames);
+
+                animate();
+            };
+
+            const animate = () => {
+                // 1. Update Angle
+                currentAngle += spinSpeed;
+
+                // 2. Apply Calculated Friction
+                spinSpeed *= friction;
+
+                // 3. Stop Condition
+                if (spinSpeed <= 0.001) {
+                    spinSpeed = 0;
+                    currentStage.value = 'active';
+                    determineWinner();
+                    drawWheel(); 
+                    return;
+                }
+
+                drawWheel();
+                rafId = requestAnimationFrame(animate);
+            };
+
+            const determineWinner = () => {
+                const len = wheelItems.value.length;
+                const arcSize = (2 * Math.PI) / len;
+                
+                const rotation = currentAngle % (2 * Math.PI);
+                let pointerAngle = (3 * Math.PI / 2); 
+                let angleRelative = (pointerAngle - rotation) % (2 * Math.PI);
+                if (angleRelative < 0) angleRelative += (2 * Math.PI);
+                
+                const index = Math.floor(angleRelative / arcSize);
+                selectedItem.value = wheelItems.value[index];
+                
+                resultForm.value = { cost: null, win: null };
+            };
+
+            // --- Result Handling ---
+
+            const confirmResult = () => {
+                if (!resultForm.value.cost || resultForm.value.cost <= 0) {
+                    alert("Please enter a valid bet amount.");
+                    return;
+                }
+                
+                const cost = resultForm.value.cost;
+                const win = resultForm.value.win || 0;
+                const multiplier = win / cost;
+
+                leaderboard.value.push({
+                    id: Date.now(),
+                    game: selectedItem.value.game,
+                    viewer: selectedItem.value.viewer,
+                    cost: cost,
+                    win: win,
+                    multiplier: multiplier
+                });
+
+                if (multiplier >= 10) {
+                    triggerConfetti({ particleCount: 200, spread: 100, origin: { y: 0.6 }, colors: ['#FFD700', '#FFFFFF'] });
+                }
+
+                removeGameGlobal();
+            };
+
+            const skipGame = () => {
+                removeGameGlobal();
+            };
+
+            const removeGameGlobal = () => {
+                const gameToRemove = selectedItem.value.game;
+                
+                const initialCount = wheelItems.value.length;
+                wheelItems.value = wheelItems.value.filter(item => item.game !== gameToRemove);
+                
+                selectedItem.value = null;
+                currentStage.value = 'idle';
+                
+                nextTick(() => {
+                    initWheel(); 
+                });
+            };
+
+            const confirmReset = () => {
+                if (confirm("Reset everything? This cannot be undone.")) {
+                    wheelItems.value = [];
+                    leaderboard.value = [];
+                    currentStage.value = 'idle';
+                    selectedItem.value = null;
+                    localStorage.removeItem('casino_wheel_final_items');
+                    localStorage.removeItem('casino_leaderboard_final');
+                    initWheel();
+                }
+            };
+
+            // Helpers
+            const formatNumber = (num) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' }).format(num).replace('$', 'SC');
+            
+            const getMultiplierColor = (m) => {
+                if (m >= 10) return 'mult-big';
+                if (m >= 1) return 'mult-win';
+                return 'mult-loss';
+            };
+
+            const getRankColor = (index) => {
+                if(index === 0) return 'text-yellow-400 border-yellow-500 shadow shadow-yellow-500/50';
+                if(index === 1) return 'text-gray-300 border-gray-400';
+                if(index === 2) return 'text-orange-400 border-orange-500';
+                return 'text-gray-600 border-gray-800';
+            };
+
+            const triggerConfetti = (opts) => {
+                if (window.confetti) window.confetti(opts);
+            };
+
+            return {
+                wheelItems,
+                leaderboard,
+                sortedLeaderboard,
+                currentStage,
+                selectedItem,
+                wheelCanvas,
+                spinWheel,
+                showImport,
+                importText,
+                importLineCount,
+                processImport,
+                confirmReset,
+                resultForm,
+                confirmResult,
+                skipGame,
+                formatNumber,
+                getMultiplierColor,
+                getRankColor,
+                previewMultiplier,
+                previewMultiplierClass,
+                spinDuration
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
