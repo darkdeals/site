@@ -273,23 +273,34 @@
                         <div v-for="(entry, index) in sortedLeaderboard" :key="entry.id" 
                              class="p-3 rounded bg-[#161616] border border-gray-800/50 hover:border-gray-600 transition flex items-center justify-between group">
                             
-                            <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 flex items-center justify-center rounded bg-black border border-gray-800 font-black text-sm casino-font" 
+                            <div class="flex items-center gap-3 overflow-hidden">
+                                <div class="w-8 h-8 flex items-center justify-center rounded bg-black border border-gray-800 font-black text-sm casino-font shrink-0" 
                                      :class="getRankColor(index)">
                                     {{ index + 1 }}
                                 </div>
-                                <div class="flex flex-col">
-                                    <span class="font-bold text-white text-sm group-hover:text-yellow-500 transition truncate max-w-[250px]">{{ entry.game }}</span>
-                                    <span class="text-[10px] text-gray-500 tracking-wider">{{ entry.viewer }}</span>
+                                <div class="flex flex-col overflow-hidden">
+                                    <span class="font-bold text-white text-sm group-hover:text-yellow-500 transition truncate max-w-[200px]">{{ entry.game }}</span>
+                                    <span class="text-[10px] text-gray-500 tracking-wider truncate max-w-[200px]">{{ entry.viewer }}</span>
                                 </div>
                             </div>
 
-                            <div class="text-right">
-                                <div class="text-lg font-bold mono-font" :class="getMultiplierColor(entry.multiplier)">
-                                    {{ entry.multiplier.toFixed(2) }}x
+                            <div class="flex items-center gap-4 shrink-0">
+                                <div class="text-right">
+                                    <div class="text-lg font-bold mono-font" :class="getMultiplierColor(entry.multiplier)">
+                                        {{ entry.multiplier.toFixed(2) }}x
+                                    </div>
+                                    <div class="text-[10px] text-gray-600 mono-font">
+                                        {{ formatNumber(entry.win) }} / {{ formatNumber(entry.cost) }}
+                                    </div>
                                 </div>
-                                <div class="text-[10px] text-gray-600 mono-font">
-                                    {{ formatNumber(entry.win) }} / {{ formatNumber(entry.cost) }}
+                                
+                                <div class="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    <button @click="openEditModal(entry)" class="text-gray-500 hover:text-yellow-500 transition" title="Edit">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                    </button>
+                                    <button @click="deleteEntry(entry.id)" class="text-gray-500 hover:text-red-500 transition" title="Delete">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -325,6 +336,38 @@
         </div>
     </div>
 
+    <div v-if="showEditModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-[#111] border border-gray-700 rounded-xl p-6 w-full max-w-sm shadow-2xl relative">
+            <h3 class="text-xl font-bold text-white mb-4 casino-font">Edit Entry</h3>
+            
+            <div class="space-y-4 mb-6">
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1 uppercase">Game Name</label>
+                    <input v-model="editingEntry.game" type="text" class="w-full input-dark p-2 rounded text-sm">
+                </div>
+                <div>
+                    <label class="block text-[10px] text-gray-400 mb-1 uppercase">Viewer Name</label>
+                    <input v-model="editingEntry.viewer" type="text" class="w-full input-dark p-2 rounded text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-1 uppercase">Play Amount (SC)</label>
+                        <input v-model.number="editingEntry.cost" type="number" class="w-full input-dark p-2 rounded text-lg mono-font">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-gray-400 mb-1 uppercase">Total Win (SC)</label>
+                        <input v-model.number="editingEntry.win" type="number" class="w-full input-dark p-2 rounded text-lg mono-font">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex gap-3">
+                <button @click="showEditModal = false" class="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded text-sm font-bold transition uppercase tracking-wide">Cancel</button>
+                <button @click="saveEdit" class="flex-[2] px-4 py-2 bg-yellow-700 hover:bg-yellow-600 text-white rounded font-bold text-sm transition uppercase tracking-wide">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -337,7 +380,6 @@
                 if (window.crypto && window.crypto.getRandomValues) {
                     const array = new Uint32Array(1);
                     window.crypto.getRandomValues(array);
-                    // Divide by maximum possible uint32 value + 1 to get a float between 0 (inclusive) and 1 (exclusive)
                     return array[0] / 4294967296; 
                 }
                 return Math.random();
@@ -346,14 +388,18 @@
             // --- State ---
             const wheelItems = ref([]);
             const leaderboard = ref([]);
-            const currentStage = ref('idle'); // idle, spinning, active
+            const currentStage = ref('idle'); 
             const selectedItem = ref(null);
-            const spinDuration = ref(5); // Seconds
+            const spinDuration = ref(5);
             
             // Modal State
             const showImport = ref(false);
             const importText = ref('');
             
+            // Edit State
+            const showEditModal = ref(false);
+            const editingEntry = ref({ id: null, game: '', viewer: '', cost: null, win: null });
+
             // Result Form
             const resultForm = ref({ cost: null, win: null });
 
@@ -424,7 +470,6 @@
                 if(!wheelCanvas.value) return;
                 const dpr = window.devicePixelRatio || 1;
                 
-                // Set logic dimensions
                 wheelCanvas.value.width = 800 * dpr;
                 wheelCanvas.value.height = 800 * dpr;
                 
@@ -470,17 +515,12 @@
                 const centerY = height / 2;
                 const radius = (width / 2) - 20;
 
-                // 1. Clear
                 ctx.clearRect(0, 0, width, height);
                 
-                // 2. Draw Main Wheel 
-                // Optimization: If spinning fast & > 50 items, do not render text
                 const isFastSpin = spinSpeed > 0.05;
                 const showDetails = !isFastSpin;
                 drawWheelSlices(ctx, centerX, centerY, radius, currentAngle, 1, showDetails, false);
 
-                // 3. Draw Magnifier Lens (Glass)
-                // Render if slowed down significantly or stopped
                 const isSlow = (spinSpeed < 0.08 && currentStage.value === 'spinning');
                 const isStopped = currentStage.value === 'active';
 
@@ -513,17 +553,14 @@
                     context.lineWidth = 1;
                     context.stroke();
 
-                    // Text Rendering
                     if (showText || (len < 60 && !forceDetail) || forceDetail) {
                         context.save();
                         context.rotate(startAngle + arcSize / 2);
                         context.textAlign = "right";
                         context.fillStyle = "white";
                         
-                        // Font Size Logic
-                        // forceDetail = inside the lens. We need smaller relative font because scale is huge.
                         let fontSize = forceDetail ? 14 : (len > 40 ? 12 : 18);
-                        if((len > 100 && !forceDetail) || len > 200) fontSize = 0; // Hide on main wheel if too many
+                        if((len > 100 && !forceDetail) || len > 200) fontSize = 0; 
 
                         if (fontSize > 0) {
                             context.font = `bold ${fontSize}px Inter`;
@@ -531,7 +568,6 @@
                             context.shadowBlur = forceDetail ? 2 : 4;
                             
                             let text = item.game;
-                            // Less truncation in magnifier
                             const maxLen = forceDetail ? 30 : 20;
                             if(text.length > maxLen) text = text.substring(0, maxLen-1) + '…';
                             
@@ -541,7 +577,6 @@
                     }
                 });
 
-                // Center Hub
                 context.beginPath();
                 context.arc(0, 0, 10, 0, 2 * Math.PI);
                 context.fillStyle = '#111';
@@ -549,7 +584,6 @@
 
                 context.restore();
                 
-                // Outer Ring
                 if (scale === 1) {
                     context.beginPath();
                     context.arc(cx, cy, r, 0, 2 * Math.PI);
@@ -566,38 +600,30 @@
 
                 context.save();
 
-                // 1. Clipping Path
                 context.beginPath();
                 context.arc(lensX, lensY, lensRadius, 0, 2 * Math.PI);
                 context.clip();
 
-                // 2. Background
                 context.fillStyle = '#1a1a1a';
                 context.fill();
 
-                // 3. Render Wheel (Zoomed)
-                // We want the area at the TOP of the wheel (Pointer) to be in the center of the lens.
                 const magScale = 3.5;
                 const dpr = window.devicePixelRatio || 1; 
 
-                // We need to translate/scale to bring the top of the wheel to lens center
                 context.translate(lensX, lensY);
                 context.scale(magScale, magScale);
-                context.translate(-lensX, - (cy - r + 30)); // Offset to align top edge
+                context.translate(-lensX, - (cy - r + 30)); 
 
-                // Draw with forceDetail=true to ensure text renders
                 drawWheelSlices(context, cx, cy, r, currentAngle, 1, true, true);
 
                 context.restore();
 
-                // 4. Lens Border
                 context.beginPath();
                 context.arc(lensX, lensY, lensRadius, 0, 2 * Math.PI);
                 context.lineWidth = 6;
                 context.strokeStyle = '#FFD700'; 
                 context.stroke();
                 
-                // Shine effect
                 context.beginPath();
                 context.arc(lensX, lensY, lensRadius - 10, -0.2, 1.2 * Math.PI);
                 context.strokeStyle = "rgba(255,255,255,0.1)";
@@ -612,13 +638,9 @@
                 
                 currentStage.value = 'spinning';
                 
-                // PHYSICS CALCULATION
-                // We use our secure randomizer to completely randomize the starting burst and spin duration variance.
-                // Random initial speed between ~0.6 and ~1.2 ensures huge variance in rotation distance.
                 const startSpeed = 0.6 + (getSecureRandom() * 0.6); 
                 const endSpeed = 0.001;
                 
-                // Add minor random variance to duration (±0.25 seconds) to make the deceleration curve unpredictable.
                 const durationVariance = (getSecureRandom() * 0.5) - 0.25;
                 const durationFrames = (spinDuration.value + durationVariance) * 60;
                 
@@ -629,13 +651,9 @@
             };
 
             const animate = () => {
-                // 1. Update Angle
                 currentAngle += spinSpeed;
-
-                // 2. Apply Calculated Friction
                 spinSpeed *= friction;
 
-                // 3. Stop Condition
                 if (spinSpeed <= 0.001) {
                     spinSpeed = 0;
                     currentStage.value = 'active';
@@ -698,7 +716,6 @@
             const removeGameGlobal = () => {
                 const gameToRemove = selectedItem.value.game;
                 
-                const initialCount = wheelItems.value.length;
                 wheelItems.value = wheelItems.value.filter(item => item.game !== gameToRemove);
                 
                 selectedItem.value = null;
@@ -715,13 +732,45 @@
                     leaderboard.value = [];
                     currentStage.value = 'idle';
                     selectedItem.value = null;
-                    localStorage.removeItem('casino_wheel_final_items');
-                    localStorage.removeItem('casino_leaderboard_final');
                     initWheel();
                 }
             };
 
-            // Helpers
+            // --- Edit / Delete Handling ---
+            
+            const openEditModal = (entry) => {
+                editingEntry.value = { ...entry };
+                showEditModal.value = true;
+            };
+
+            const saveEdit = () => {
+                const index = leaderboard.value.findIndex(e => e.id === editingEntry.value.id);
+                if (index !== -1) {
+                    const cost = Number(editingEntry.value.cost);
+                    const win = Number(editingEntry.value.win);
+                    
+                    if (!cost || cost <= 0) {
+                        alert("Play Amount must be greater than 0.");
+                        return;
+                    }
+
+                    leaderboard.value[index] = {
+                        ...editingEntry.value,
+                        cost: cost,
+                        win: win,
+                        multiplier: win / cost
+                    };
+                }
+                showEditModal.value = false;
+            };
+
+            const deleteEntry = (id) => {
+                if (confirm("Are you sure you want to remove this entry from the leaderboard?")) {
+                    leaderboard.value = leaderboard.value.filter(e => e.id !== id);
+                }
+            };
+
+            // --- UI Helpers ---
             const formatNumber = (num) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' }).format(num).replace('$', 'SC');
             
             const getMultiplierColor = (m) => {
@@ -762,7 +811,13 @@
                 getRankColor,
                 previewMultiplier,
                 previewMultiplierClass,
-                spinDuration
+                spinDuration,
+                // New Exports
+                showEditModal,
+                editingEntry,
+                openEditModal,
+                saveEdit,
+                deleteEntry
             };
         }
     }).mount('#app');
