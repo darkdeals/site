@@ -14,7 +14,7 @@
             background-color: #111827; 
             color: #e2e8f0;
             overflow: hidden; 
-            touch-action: none; /* Disables browser-level zooming/scrolling so our JS gets all gestures */
+            touch-action: none; /* Disables browser-level zooming/scrolling */
             margin: 0;
             user-select: none;
             -webkit-user-select: none;
@@ -78,7 +78,8 @@
                 position: 'absolute', 
                 left: dragState.currentX + 'px', 
                 top: dragState.currentY + 'px', 
-                transform: `scale(${viewports[dragState.startZone].scale})` 
+                transform: `scale(${viewports[dragState.startZone].scale})`,
+                transformOrigin: 'top left'
              }">
             <game-card :data="dragState.card" class="card-dragging ring-2 ring-white"></game-card>
         </div>
@@ -181,6 +182,8 @@
             const cards = inject('cards');
             const viewports = inject('viewports');
             const dragState = inject('dragState');
+            
+            // These injects were failing because they were never provided!
             const handleCardDown = inject('handleCardDown');
             const toggleExhaust = inject('toggleExhaust');
             const handleZonePointerDown = inject('handleZonePointerDown');
@@ -255,7 +258,6 @@
                     const response = await fetch('https://marvelcdb.com/api/public/cards/');
                     const rawData = await response.json();
                     
-                    // Prune data severely to prevent LocalStorage Quota Exceeded error
                     const prunedData = rawData.map(c => ({
                         code: c.code,
                         name: c.name,
@@ -271,7 +273,7 @@
                     }));
 
                     masterDatabase.value = prunedData;
-                    localStorage.setItem('mc_db_vue_v2', JSON.stringify(prunedData));
+                    localStorage.setItem('mc_db', JSON.stringify(prunedData));
                 } catch (error) {
                     console.error("Failed to sync card database:", error);
                     alert("Failed to reach MarvelCDB. Check your connection.");
@@ -310,10 +312,10 @@
 
             // --- INIT ---
             onMounted(() => {
-                const savedCards = localStorage.getItem('mc_cards_vue_v2');
+                const savedCards = localStorage.getItem('mc_cards');
                 if (savedCards) cards.value = JSON.parse(savedCards);
 
-                const savedDB = localStorage.getItem('mc_db_vue_v2');
+                const savedDB = localStorage.getItem('mc_db');
                 if (savedDB) {
                     masterDatabase.value = JSON.parse(savedDB);
                 } else {
@@ -325,7 +327,7 @@
                 window.addEventListener('pointercancel', handleGlobalPointerUp);
             });
 
-            watch(cards, (newVal) => localStorage.setItem('mc_cards_vue_v2', JSON.stringify(newVal)), { deep: true });
+            watch(cards, (newVal) => localStorage.setItem('mc_cards', JSON.stringify(newVal)), { deep: true });
 
             // --- GESTURE LOGIC ---
             const applyZoom = (zoneId, scaleMultiplier, pointerX, pointerY) => {
@@ -351,10 +353,9 @@
                     const rect = document.getElementById(zoneId).getBoundingClientRect();
                     applyZoom(zoneId, e.deltaY > 0 ? 0.95 : 1.05, e.clientX - rect.left, e.clientY - rect.top);
                 } else {
-                    // Standard wheel/scroll: default mapping to zoom, 
-                    // Trackpad two-finger scroll will also trigger this but let's treat it as zoom per requirements
-                    const rect = document.getElementById(zoneId).getBoundingClientRect();
-                    applyZoom(zoneId, e.deltaY > 0 ? 0.9 : 1.1, e.clientX - rect.left, e.clientY - rect.top);
+                    // Standard Trackpad 2-finger scroll or Mouse Wheel -> Pan 1:1
+                    vp.x -= e.deltaX;
+                    vp.y -= e.deltaY;
                 }
             };
 
@@ -374,8 +375,6 @@
 
             const handleZonePointerDown = (e, zoneId) => {
                 e.preventDefault();
-                // We MUST store plain coordinates. Storing the raw 'e' object fails because 
-                // the browser zeroes out/recycles the properties during high-frequency move events.
                 pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
                 activePanZone = zoneId;
 
@@ -401,7 +400,6 @@
                 if (!pointers.has(e.pointerId)) return;
                 e.preventDefault();
                 
-                // Update tracked coordinates
                 pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
                 
                 if (!activePanZone) return;
@@ -475,9 +473,13 @@
                 }
             };
 
+            provide('toggleExhaust', toggleExhaust);
+            provide('handleZoneWheel', handleZoneWheel);
+            provide('handleCardDown', handleCardDown);
+            provide('handleZonePointerDown', handleZonePointerDown);
+
             return {
                 viewports, dragState, resetGame,
-                toggleExhaust, handleCardDown, handleZonePointerDown, handleZoneWheel,
                 masterDatabase, dbSyncing, syncDatabase, isVaultOpen, vaultSearch, filteredVault, spawnCard, getColors
             };
         }
