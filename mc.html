@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Marvel Champions: Digital Playmat</title>
+    
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        body { 
+            background-color: #111827; 
+            color: #e2e8f0;
+            overflow: hidden; 
+            touch-action: none;
+            margin: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        }
+        
+        .grid-pattern {
+            background-image: radial-gradient(#4a5568 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .card-base { will-change: transform, left, top; }
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5); transition: box-shadow 0.2s; }
+        .card-dragging { 
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); 
+            z-index: 9999 !important; 
+            pointer-events: none; 
+        }
+        
+        /* Custom Scrollbar for the Vault */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="app" v-cloak class="h-screen w-screen flex flex-col bg-gray-900 overflow-hidden relative">
+    
+    <div class="h-12 bg-gray-800 border-b border-gray-600 flex items-center justify-between px-4 z-[70] shadow-md flex-shrink-0 relative">
+        <div class="font-bold text-lg tracking-tighter">
+            <span class="text-red-500">MARVEL</span> <span class="text-white">SANDBOX</span>
+        </div>
+        <div class="flex gap-3 items-center">
+            <span v-if="dbSyncing" class="text-xs text-blue-400 animate-pulse"><i class="fas fa-spinner fa-spin mr-1"></i> Syncing API...</span>
+            <span v-else class="text-xs text-gray-400">DB: {{ masterDatabase.length }} cards</span>
+            
+            <button @click="syncDatabase" :disabled="dbSyncing" class="text-xs bg-blue-700 hover:bg-blue-600 disabled:opacity-50 transition px-3 py-1.5 rounded text-white flex items-center gap-2">
+                <i class="fas fa-sync-alt"></i> Sync DB
+            </button>
+            <div class="w-px h-6 bg-gray-600 mx-1"></div>
+            <button @click="resetGame" class="text-xs bg-gray-700 hover:bg-gray-600 transition px-3 py-1.5 rounded text-white flex items-center gap-2">
+                <i class="fas fa-trash-alt"></i> Clear Board
+            </button>
+            <button @click="isVaultOpen = !isVaultOpen" :class="isVaultOpen ? 'bg-red-600 hover:bg-red-500' : 'bg-indigo-600 hover:bg-indigo-500'" class="text-xs transition px-3 py-1.5 rounded text-white flex items-center gap-2 font-bold w-28 justify-center">
+                <i :class="isVaultOpen ? 'fas fa-times' : 'fas fa-box-open'"></i> {{ isVaultOpen ? 'Close Vault' : 'Card Vault' }}
+            </button>
+        </div>
+    </div>
+
+    <game-zone id="villain" label="VILLAIN" class="h-1/4 bg-gray-800/50"></game-zone>
+    <game-zone id="play" label="PLAY AREA" class="flex-1 bg-gray-800/30"></game-zone>
+    <game-zone id="hand" label="HAND" class="h-1/4 bg-gray-800/50"></game-zone>
+
+    <div v-if="dragState.isActive" class="fixed inset-0 pointer-events-none z-[100]">
+        <div :style="{ 
+                position: 'absolute', 
+                left: dragState.currentX + 'px', 
+                top: dragState.currentY + 'px', 
+                transform: `scale(${viewports[dragState.startZone].scale})` 
+             }">
+            <game-card :data="dragState.card" class="card-dragging ring-2 ring-white"></game-card>
+        </div>
+    </div>
+
+    <div v-if="isVaultOpen" class="absolute top-12 right-0 bottom-0 w-80 bg-gray-800 border-l border-gray-600 flex flex-col z-[60] shadow-2xl transition-transform">
+        <div class="p-3 border-b border-gray-600 bg-gray-900">
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 text-sm"></i>
+                <input v-model="vaultSearch" type="text" placeholder="Search cards by name..." 
+                       class="w-full bg-gray-700 text-white text-sm rounded pl-9 pr-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 transition border border-gray-600">
+            </div>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-2 space-y-2">
+            <div v-if="filteredVault.length === 0" class="text-center text-gray-500 text-sm mt-8">
+                No cards found.
+            </div>
+            
+            <div v-for="card in filteredVault" :key="card.code" 
+                 @click="spawnCard(card)"
+                 class="flex items-center justify-between p-2 rounded cursor-pointer border hover:brightness-110 active:scale-95 transition-all"
+                 :class="[getColors(card.faction_code).bg, getColors(card.faction_code).border]">
+                
+                <div class="flex flex-col truncate pr-2">
+                    <span class="font-bold text-sm truncate" :class="getColors(card.faction_code).text">{{ card.name }}</span>
+                    <span class="text-[10px] uppercase font-bold opacity-70" :class="getColors(card.faction_code).text">{{ card.type_code }} &bull; {{ card.faction_code }}</span>
+                </div>
+                
+                <div v-if="card.cost !== undefined" class="flex-shrink-0 w-6 h-6 rounded-full bg-white flex items-center justify-center font-bold text-xs shadow text-gray-900 border border-gray-300">
+                    {{ card.cost }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const { createApp, ref, computed, onMounted, watch, provide, inject } = Vue;
+
+    const generateId = () => Math.random().toString(36).substr(2, 9);
+    
+    const COLORS = {
+        aggression: { bg: 'bg-red-100', border: 'border-red-600', text: 'text-red-900', header: 'bg-red-600' },
+        justice: { bg: 'bg-yellow-100', border: 'border-yellow-500', text: 'text-yellow-900', header: 'bg-yellow-500' },
+        leadership: { bg: 'bg-blue-100', border: 'border-blue-500', text: 'text-blue-900', header: 'bg-blue-500' },
+        protection: { bg: 'bg-green-100', border: 'border-green-500', text: 'text-green-900', header: 'bg-green-500' },
+        basic: { bg: 'bg-gray-200', border: 'border-gray-500', text: 'text-gray-900', header: 'bg-gray-500' },
+        hero: { bg: 'bg-indigo-100', border: 'border-indigo-600', text: 'text-indigo-900', header: 'bg-indigo-600' },
+        villain: { bg: 'bg-orange-100', border: 'border-orange-600', text: 'text-orange-900', header: 'bg-orange-600' },
+        encounter: { bg: 'bg-orange-50', border: 'border-orange-400', text: 'text-orange-900', header: 'bg-orange-500' }
+    };
+
+    const getColors = (code) => COLORS[code] || COLORS.basic;
+
+    // --- COMPONENTS ---
+    const GameCard = {
+        props: ['data'],
+        setup(props) {
+            const colors = computed(() => getColors(props.data.faction_code));
+            return { colors };
+        },
+        template: `
+            <div class="absolute w-32 h-44 rounded-lg flex flex-col overflow-hidden border-2 card-base bg-white"
+                 :class="[colors.border]">
+                <div class="text-white text-[10px] font-bold px-1 py-1 flex justify-between" :class="colors.header">
+                    <span class="truncate pr-1">{{ data.name }}</span>
+                    <span v-if="data.cost !== undefined" class="bg-white text-black rounded-full w-4 h-4 flex items-center justify-center text-[9px] flex-shrink-0">{{ data.cost }}</span>
+                </div>
+                <div class="flex-1 p-1 flex flex-col relative" :class="colors.bg">
+                    <div class="flex-1 bg-white/60 rounded p-1 mb-1 border border-black/5 overflow-hidden pointer-events-none">
+                        <div class="text-[9px] italic text-gray-600 mb-1 truncate">{{ data.traits || '&nbsp;' }}</div>
+                        <div class="text-[8px] leading-tight" :class="colors.text" v-html="data.text"></div>
+                    </div>
+                </div>
+                <div v-if="data.exhausted" class="absolute inset-0 bg-black/30 pointer-events-none"></div>
+            </div>
+        `
+    };
+
+    const GameZone = {
+        props: ['id', 'label'],
+        components: { GameCard },
+        setup(props) {
+            const cards = inject('cards');
+            const viewports = inject('viewports');
+            const dragState = inject('dragState');
+            const handleCardDown = inject('handleCardDown');
+            const toggleExhaust = inject('toggleExhaust');
+            const handleZonePointerDown = inject('handleZonePointerDown');
+            const handleZoneWheel = inject('handleZoneWheel');
+
+            const vp = computed(() => viewports.value[props.id]);
+            const zoneCards = computed(() => 
+                cards.value.filter(c => c.zone === props.id && c.instanceId !== dragState.value.card?.instanceId)
+            );
+
+            return { vp, zoneCards, handleCardDown, toggleExhaust, handleZonePointerDown, handleZoneWheel };
+        },
+        template: `
+            <div :id="id" class="relative overflow-hidden border-b border-gray-700 select-none"
+                 @pointerdown="handleZonePointerDown($event, id)"
+                 @wheel="handleZoneWheel($event, id)">
+                
+                <div class="absolute top-2 left-2 z-10 bg-black/50 text-white text-[10px] px-2 py-1 rounded backdrop-blur pointer-events-none">
+                    {{ label }} {{ vp.scale.toFixed(2) }}x
+                </div>
+                
+                <div class="absolute inset-0 grid-pattern origin-top-left" 
+                     :style="{ transform: \`translate(\${vp.x}px, \${vp.y}px) scale(\${vp.scale})\` }">
+                    <div v-for="c in zoneCards" :key="c.instanceId" 
+                         @pointerdown.stop="handleCardDown($event, id, c)"
+                         @contextmenu.prevent="toggleExhaust(c)"
+                         class="absolute cursor-grab active:cursor-grabbing" 
+                         :style="{ left: c.x + 'px', top: c.y + 'px', transform: c.exhausted ? 'rotate(90deg)' : 'none' }">
+                        <game-card :data="c" class="card-shadow hover:ring-2 ring-blue-400"></game-card>
+                    </div>
+                </div>
+            </div>
+        `
+    };
+
+    // --- MAIN APP ---
+    const app = createApp({
+        components: { GameZone, GameCard },
+        setup() {
+            // State
+            const viewports = ref({
+                villain: { x: 0, y: 0, scale: 0.8 },
+                play:    { x: 0, y: 0, scale: 1.0 },
+                hand:    { x: 0, y: 0, scale: 1.1 }
+            });
+            const cards = ref([]);
+            const dragState = ref({
+                isActive: false, card: null, startZone: null, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0
+            });
+
+            // Vault State
+            const masterDatabase = ref([]);
+            const dbSyncing = ref(false);
+            const isVaultOpen = ref(false);
+            const vaultSearch = ref("");
+
+            provide('cards', cards);
+            provide('viewports', viewports);
+            provide('dragState', dragState);
+
+            // Engine Tracking
+            const pointers = new Map();
+            let activePanZone = null;
+            let lastPinchDist = 0;
+            let lastPanMidX = 0;
+            let lastPanMidY = 0;
+
+            // --- DATABASE LOGIC ---
+            const syncDatabase = async () => {
+                dbSyncing.value = true;
+                try {
+                    const response = await fetch('https://marvelcdb.com/api/public/cards/');
+                    const data = await response.json();
+                    masterDatabase.value = data;
+                    localStorage.setItem('mc_db_vue', JSON.stringify(data));
+                } catch (error) {
+                    console.error("Failed to sync card database:", error);
+                    alert("Failed to reach MarvelCDB. Check your connection.");
+                } finally {
+                    dbSyncing.value = false;
+                }
+            };
+
+            const filteredVault = computed(() => {
+                if (!vaultSearch.value.trim()) return masterDatabase.value.slice(0, 100);
+                const query = vaultSearch.value.toLowerCase();
+                return masterDatabase.value
+                    .filter(c => c.name && c.name.toLowerCase().includes(query))
+                    .slice(0, 100); // Limit to top 100 for performance
+            });
+
+            const spawnCard = (baseCard) => {
+                const targetZone = 'play';
+                const vp = viewports.value[targetZone];
+                const rect = document.getElementById(targetZone).getBoundingClientRect();
+                
+                // Spawn near the center of the current Play area viewport
+                const centerX = (rect.width / 2 - vp.x) / vp.scale;
+                const centerY = (rect.height / 2 - vp.y) / vp.scale;
+
+                cards.value.push({
+                    ...baseCard,
+                    instanceId: generateId(),
+                    zone: targetZone,
+                    x: centerX - 64, // offset by half card width (128/2)
+                    y: centerY - 88, // offset by half card height (176/2)
+                    exhausted: false
+                });
+            };
+
+            const resetGame = () => cards.value = [];
+
+            // --- INIT ---
+            onMounted(() => {
+                // Load Active Board
+                const savedCards = localStorage.getItem('mc_cards_vue');
+                if (savedCards) cards.value = JSON.parse(savedCards);
+
+                // Load Master Database
+                const savedDB = localStorage.getItem('mc_db_vue');
+                if (savedDB) {
+                    masterDatabase.value = JSON.parse(savedDB);
+                } else {
+                    syncDatabase();
+                }
+
+                // Global pointer events for dragging off-zone
+                window.addEventListener('pointermove', handleGlobalPointerMove, { passive: false });
+                window.addEventListener('pointerup', handleGlobalPointerUp);
+                window.addEventListener('pointercancel', handleGlobalPointerUp);
+            });
+
+            watch(cards, (newVal) => localStorage.setItem('mc_cards_vue', JSON.stringify(newVal)), { deep: true });
+
+            // --- GESTURE LOGIC (Unchanged from previous fix) ---
+            const applyZoom = (zoneId, scaleMultiplier, pointerX, pointerY) => {
+                const vp = viewports.value[zoneId];
+                const newScale = Math.min(Math.max(0.2, vp.scale * scaleMultiplier), 4);
+                const ratio = newScale / vp.scale;
+                vp.x = pointerX - (pointerX - vp.x) * ratio;
+                vp.y = pointerY - (pointerY - vp.y) * ratio;
+                vp.scale = newScale;
+            };
+
+            const toggleExhaust = (card) => {
+                const target = cards.value.find(c => c.instanceId === card.instanceId);
+                if (target) target.exhausted = !target.exhausted;
+            };
+
+            const handleZoneWheel = (e, zoneId) => {
+                e.preventDefault();
+                const rect = document.getElementById(zoneId).getBoundingClientRect();
+                applyZoom(zoneId, e.deltaY > 0 ? 0.9 : 1.1, e.clientX - rect.left, e.clientY - rect.top);
+            };
+
+            const handleCardDown = (e, zoneId, card) => {
+                if (e.button === 2) return;
+                e.preventDefault();
+                const vp = viewports.value[zoneId];
+                const rect = document.getElementById(zoneId).getBoundingClientRect();
+                const cardScreenX = rect.left + vp.x + (card.x * vp.scale);
+                const cardScreenY = rect.top + vp.y + (card.y * vp.scale);
+
+                dragState.value = {
+                    isActive: true, card, startZone: zoneId, currentX: cardScreenX, currentY: cardScreenY,
+                    offsetX: e.clientX - cardScreenX, offsetY: e.clientY - cardScreenY
+                };
+            };
+
+            const handleZonePointerDown = (e, zoneId) => {
+                e.preventDefault();
+                pointers.set(e.pointerId, e);
+                activePanZone = zoneId;
+
+                if (pointers.size === 2) {
+                    const pts = Array.from(pointers.values());
+                    lastPinchDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+                    lastPanMidX = (pts[0].clientX + pts[1].clientX) / 2;
+                    lastPanMidY = (pts[0].clientY + pts[1].clientY) / 2;
+                } else if (pointers.size === 1) {
+                    lastPanMidX = e.clientX;
+                    lastPanMidY = e.clientY;
+                }
+            };
+
+            const handleGlobalPointerMove = (e) => {
+                if (dragState.value.isActive) {
+                    e.preventDefault();
+                    dragState.value.currentX = e.clientX - dragState.value.offsetX;
+                    dragState.value.currentY = e.clientY - dragState.value.offsetY;
+                    return;
+                }
+
+                if (!pointers.has(e.pointerId)) return;
+                e.preventDefault();
+                pointers.set(e.pointerId, e);
+                
+                if (!activePanZone) return;
+                const vp = viewports.value[activePanZone];
+
+                if (pointers.size === 1) {
+                    vp.x += (e.clientX - lastPanMidX);
+                    vp.y += (e.clientY - lastPanMidY);
+                    lastPanMidX = e.clientX;
+                    lastPanMidY = e.clientY;
+                } else if (pointers.size === 2) {
+                    const pts = Array.from(pointers.values());
+                    const currentDist = Math.hypot(pts[0].clientX - pts[1].clientX, pts[0].clientY - pts[1].clientY);
+                    const currentMidX = (pts[0].clientX + pts[1].clientX) / 2;
+                    const currentMidY = (pts[0].clientY + pts[1].clientY) / 2;
+
+                    vp.x += (currentMidX - lastPanMidX);
+                    vp.y += (currentMidY - lastPanMidY);
+
+                    if (lastPinchDist > 0) {
+                        const zoomFactor = currentDist / lastPinchDist;
+                        const rect = document.getElementById(activePanZone).getBoundingClientRect();
+                        applyZoom(activePanZone, zoomFactor, currentMidX - rect.left, currentMidY - rect.top);
+                    }
+
+                    lastPinchDist = currentDist;
+                    lastPanMidX = currentMidX;
+                    lastPanMidY = currentMidY;
+                }
+            };
+
+            const handleGlobalPointerUp = (e) => {
+                if (dragState.value.isActive) {
+                    const zones = ['villain', 'play', 'hand'];
+                    let targetZone = dragState.value.startZone;
+                    
+                    for (const z of zones) {
+                        const rect = document.getElementById(z).getBoundingClientRect();
+                        if (e.clientX >= rect.left && e.clientX <= rect.right && 
+                            e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                            targetZone = z;
+                            break;
+                        }
+                    }
+
+                    const vp = viewports.value[targetZone];
+                    const targetRect = document.getElementById(targetZone).getBoundingClientRect();
+                    const localX = (dragState.value.currentX - targetRect.left - vp.x) / vp.scale;
+                    const localY = (dragState.value.currentY - targetRect.top - vp.y) / vp.scale;
+
+                    const cardIndex = cards.value.findIndex(c => c.instanceId === dragState.value.card.instanceId);
+                    if (cardIndex !== -1) {
+                        cards.value[cardIndex].zone = targetZone;
+                        cards.value[cardIndex].x = localX;
+                        cards.value[cardIndex].y = localY;
+                    }
+
+                    dragState.value.isActive = false;
+                    dragState.value.card = null;
+                }
+
+                if (pointers.has(e.pointerId)) {
+                    pointers.delete(e.pointerId);
+                    if (pointers.size === 1) {
+                        const remainingPointer = Array.from(pointers.values())[0];
+                        lastPanMidX = remainingPointer.clientX;
+                        lastPanMidY = remainingPointer.clientY;
+                    } else if (pointers.size === 0) {
+                        activePanZone = null;
+                    }
+                }
+            };
+
+            return {
+                viewports, dragState, resetGame,
+                toggleExhaust, handleCardDown, handleZonePointerDown, handleZoneWheel,
+                masterDatabase, dbSyncing, syncDatabase, isVaultOpen, vaultSearch, filteredVault, spawnCard, getColors
+            };
+        }
+    });
+
+    app.mount('#app');
+</script>
+</body>
+</html>
