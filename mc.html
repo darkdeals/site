@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Marvel Champions: Digital Playmat</title>
+    <title>Marvel Champions: Vue Sandbox</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
     <style>
-        body { 
+        html, body { 
             background-color: #111827; 
             color: #e2e8f0;
             overflow: hidden; 
             touch-action: none; 
+            overscroll-behavior: none; 
             margin: 0;
             user-select: none;
             -webkit-user-select: none;
@@ -183,7 +184,6 @@
 
             const vp = computed(() => viewports.value[props.id]);
             
-            // Fix: Added safety check for drag state to ensure un-dragged cards always render
             const zoneCards = computed(() => 
                 cards.value.filter(c => c.zone === props.id && (!dragState.value.isActive || c.instanceId !== dragState.value.card?.instanceId))
             );
@@ -230,8 +230,10 @@
                 hand:    { x: 0, y: 0, scale: 1.1 }
             });
             const cards = ref([]);
+            
             const dragState = ref({
-                isActive: false, card: null, startZone: null, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0
+                isActive: false, pending: false, card: null, startZone: null, 
+                startX: 0, startY: 0, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0
             });
 
             const masterDatabase = ref([]);
@@ -248,7 +250,6 @@
             let lastPinchDist = 0;
             let lastPanMidX = 0;
             let lastPanMidY = 0;
-            let lastTap = { time: 0, instanceId: null }; // Tracks double-taps
 
             const syncDatabase = async () => {
                 dbSyncing.value = true;
@@ -312,17 +313,21 @@
                 }
 
                 const preventDefault = (e) => e.preventDefault();
-                document.addEventListener('gesturestart', preventDefault, { passive: false });
-                document.addEventListener('gesturechange', preventDefault, { passive: false });
-                document.addEventListener('gestureend', preventDefault, { passive: false });
+                const captureOpts = { passive: false, capture: true };
+                
+                document.addEventListener('gesturestart', preventDefault, captureOpts);
+                document.addEventListener('gesturechange', preventDefault, captureOpts);
+                document.addEventListener('gestureend', preventDefault, captureOpts);
 
                 window.addEventListener('wheel', (e) => {
-                    if (e.ctrlKey) e.preventDefault();
-                }, { passive: false });
+                    if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                    }
+                }, captureOpts);
 
                 window.addEventListener('pointermove', handleGlobalPointerMove, { passive: false });
-                window.addEventListener('pointerup', handleGlobalPointerUp, { passive: false });
-                window.addEventListener('pointercancel', handleGlobalPointerUp, { passive: false });
+                window.addEventListener('pointerup', handleGlobalPointerUp);
+                window.addEventListener('pointercancel', handleGlobalPointerUp);
             });
 
             watch(cards, (newVal) => localStorage.setItem('mc_cards', JSON.stringify(newVal)), { deep: true });
@@ -359,24 +364,13 @@
                 e.preventDefault();
                 e.stopPropagation();
 
-                // Custom Double-Tap Logic to bypass pointerdown interference
-                const now = Date.now();
-                if (now - lastTap.time < 300 && lastTap.instanceId === card.instanceId) {
-                    toggleExhaust(card);
-                    dragState.value.isActive = false;
-                    dragState.value.card = null;
-                    lastTap.time = 0; // Reset
-                    return;
-                }
-                lastTap = { time: now, instanceId: card.instanceId };
-
                 pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
                 activePanZone = zoneId;
 
-                // Check for pinch-to-zoom over a card
                 if (pointers.size >= 2) {
                     dragState.value.isActive = false;
-                    dragState.value.card = null; // Fix: Clear the card so it renders back in the zone immediately
+                    dragState.value.pending = false;
+                    dragState.value.card = null;
                     
                     const pts = Array.from(pointers.values());
                     lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
@@ -385,14 +379,15 @@
                     return; 
                 }
 
-                // Normal Drag Setup
                 const vp = viewports.value[zoneId];
                 const rect = document.getElementById(zoneId).getBoundingClientRect();
                 const cardScreenX = rect.left + vp.x + (card.x * vp.scale);
                 const cardScreenY = rect.top + vp.y + (card.y * vp.scale);
 
                 dragState.value = {
-                    isActive: true, card, startZone: zoneId, currentX: cardScreenX, currentY: cardScreenY,
+                    isActive: false, pending: true, card, startZone: zoneId, 
+                    startX: e.clientX, startY: e.clientY,
+                    currentX: cardScreenX, currentY: cardScreenY,
                     offsetX: e.clientX - cardScreenX, offsetY: e.clientY - cardScreenY
                 };
             };
@@ -404,6 +399,7 @@
 
                 if (pointers.size === 2) {
                     dragState.value.isActive = false;
+                    dragState.value.pending = false;
                     dragState.value.card = null; 
                     const pts = Array.from(pointers.values());
                     lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
@@ -416,12 +412,23 @@
             };
 
             const handleGlobalPointerMove = (e) => {
+                if (dragState.value.pending && !dragState.value.isActive) {
+                    const dist = Math.hypot(e.clientX - dragState.value.startX, e.clientY - dragState.value.startY);
+                    if (dist > 5) {
+                        dragState.value.isActive = true;
+                        dragState.value.pending = false;
+                    }
+                }
+
                 if (dragState.value.isActive) {
                     e.preventDefault();
                     dragState.value.currentX = e.clientX - dragState.value.offsetX;
                     dragState.value.currentY = e.clientY - dragState.value.offsetY;
                     return;
                 }
+
+                // FIX: If we are in the deadzone waiting to see if it's a drag or tap, DO NOT process background panning.
+                if (dragState.value.pending) return;
 
                 if (!pointers.has(e.pointerId)) return;
                 e.preventDefault();
@@ -458,7 +465,12 @@
             };
 
             const handleGlobalPointerUp = (e) => {
-                if (dragState.value.isActive) {
+                if (dragState.value.pending && !dragState.value.isActive) {
+                    toggleExhaust(dragState.value.card);
+                    dragState.value.pending = false;
+                    dragState.value.card = null;
+                } 
+                else if (dragState.value.isActive) {
                     const zones = ['villain', 'play', 'hand'];
                     let targetZone = dragState.value.startZone;
                     
