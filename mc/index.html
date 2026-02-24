@@ -87,6 +87,28 @@
         </div>
     </div>
 
+    <div v-if="contextMenu.isOpen" 
+         @pointerdown.stop.prevent="closeContextMenu" 
+         class="fixed inset-0 z-[199]"></div>
+
+    <div v-if="contextMenu.isOpen" 
+         class="fixed z-[200] bg-gray-800 border border-gray-600 rounded shadow-2xl flex flex-col overflow-hidden min-w-[180px] origin-top-left"
+         :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
+        <div class="px-4 py-2 bg-gray-900 border-b border-gray-700 text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">
+            {{ contextMenu.card.name }}
+        </div>
+        
+        <button v-if="canFlip(contextMenu.card)" 
+                @click="flipCard(contextMenu.card)" 
+                class="px-4 py-4 text-left text-sm text-white hover:bg-indigo-600 active:bg-indigo-700 flex items-center gap-3 transition-colors">
+            <i class="fas fa-sync-alt w-4 text-center"></i> Flip Card
+        </button>
+        
+        <button class="px-4 py-4 text-left text-sm text-gray-500 flex items-center gap-3 cursor-not-allowed">
+            <i class="fas fa-plus-circle w-4 text-center"></i> Add Damage
+        </button>
+    </div>
+
     <div v-if="isVaultOpen" class="absolute top-12 right-0 bottom-0 w-80 bg-gray-800 border-l border-gray-600 flex flex-col z-[60] shadow-2xl transition-transform">
         <div class="p-3 border-b border-gray-600 bg-gray-900">
             <div class="relative">
@@ -185,6 +207,7 @@
             const dragState = inject('dragState');
             
             const handleCardDown = inject('handleCardDown');
+            const handleContextMenu = inject('handleContextMenu'); // Inject the new handler
             const handleZonePointerDown = inject('handleZonePointerDown');
             const handleZoneWheel = inject('handleZoneWheel');
 
@@ -194,7 +217,7 @@
                 cards.value.filter(c => c.zone === props.id && (!dragState.value.isActive || c.instanceId !== dragState.value.card?.instanceId))
             );
 
-            return { vp, zoneCards, handleCardDown, handleZonePointerDown, handleZoneWheel };
+            return { vp, zoneCards, handleCardDown, handleContextMenu, handleZonePointerDown, handleZoneWheel };
         },
         template: `
             <div :id="id" class="relative overflow-hidden border-b border-gray-700 select-none"
@@ -216,6 +239,7 @@
                      :style="{ transform: \`translate(\${vp.x}px, \${vp.y}px) scale(\${vp.scale})\` }">
                     <div v-for="c in zoneCards" :key="c.instanceId" 
                          @pointerdown.stop="handleCardDown($event, id, c)"
+                         @contextmenu.prevent.stop="handleContextMenu($event, c)" 
                          class="absolute cursor-grab active:cursor-grabbing transition duration-300"
                          :class="{ 'grayscale opacity-60': c.exhausted }" 
                          :style="{ left: c.x + 'px', top: c.y + 'px' }">
@@ -225,6 +249,7 @@
             </div>
         `
     };
+
 
     // --- MAIN APP ---
     const app = createApp({
@@ -242,6 +267,13 @@
                 startX: 0, startY: 0, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0
             });
 
+            const contextMenu = ref({
+                isOpen: false,
+                x: 0,
+                y: 0,
+                card: null
+            });
+
             const masterDatabase = ref([]);
             const dbSyncing = ref(false);
             const isVaultOpen = ref(false);
@@ -256,6 +288,7 @@
             let lastPinchDist = 0;
             let lastPanMidX = 0;
             let lastPanMidY = 0;
+            let longPressTimer = null; // Timer for the context menu
 
             const syncDatabase = async () => {
                 dbSyncing.value = true;
@@ -263,12 +296,43 @@
                     const response = await fetch('https://marvelcdb.com/api/public/cards/');
                     const rawData = await response.json();
                     
-                    const prunedData = rawData.map(c => ({
-                        code: c.code, name: c.name, type_code: c.type_code, faction_code: c.faction_code,
-                        cost: c.cost, text: c.text, traits: c.traits, attack: c.attack, thwart: c.thwart, 
-                        defense: c.defense, health: c.health
-                    }));
+                    const uniqueCardsMap = new Map();
 
+                    rawData.forEach(c => {
+                        const name = c.name || '';
+                        const subname = c.subname || '';
+                        const aspect = c.faction_code || '';
+                        const cost = c.cost !== undefined && c.cost !== null ? c.cost : '';
+                        const text = c.text || '';
+                        
+                        const uniqueKey = `${name}|${subname}|${aspect}|${cost}|${text}`;
+
+                        if (!uniqueCardsMap.has(uniqueKey)) {
+                            uniqueCardsMap.set(uniqueKey, {
+                                code: c.code, 
+                                name: c.name, 
+                                subname: c.subname,
+                                type_code: c.type_code, 
+                                faction_code: c.faction_code,
+                                cost: c.cost, 
+                                text: c.text, 
+                                traits: c.traits, 
+                                attack: c.attack, 
+                                thwart: c.thwart, 
+                                defense: c.defense, 
+                                health: c.health,
+                                linked_to_code: c.linked_to_code,   
+                                pack_names: c.pack_name ? [c.pack_name] : [] 
+                            });
+                        } else {
+                            const existingCard = uniqueCardsMap.get(uniqueKey);
+                            if (c.pack_name && !existingCard.pack_names.includes(c.pack_name)) {
+                                existingCard.pack_names.push(c.pack_name);
+                            }
+                        }
+                    });
+
+                    const prunedData = Array.from(uniqueCardsMap.values());
                     masterDatabase.value = prunedData;
                     localStorage.setItem('mc_db', JSON.stringify(prunedData));
                 } catch (error) {
@@ -307,6 +371,60 @@
 
             const resetGame = () => cards.value = [];
 
+            // --- CONTEXT MENU LOGIC ---
+            const openContextMenu = (x, y, card) => {
+                // Prevent menu from overflowing off the screen edge
+                let finalX = x;
+                let finalY = y;
+                const menuWidth = 180;
+                const expectedHeight = 120; // approximate height with 2 items
+
+                if (x + menuWidth > window.innerWidth) finalX = window.innerWidth - menuWidth - 10;
+                if (y + expectedHeight > window.innerHeight) finalY = window.innerHeight - expectedHeight - 10;
+                
+                contextMenu.value = {
+                    isOpen: true,
+                    x: finalX,
+                    y: finalY,
+                    card: card
+                };
+            };
+
+            const closeContextMenu = () => {
+                contextMenu.value.isOpen = false;
+                contextMenu.value.card = null;
+            };
+
+            const canFlip = (card) => {
+                if (!card) return false;
+                // It can flip if it links to something, or something links to it.
+                return !!masterDatabase.value.find(c => c.code === card.linked_to_code || c.linked_to_code === card.code);
+            };
+
+            const flipCard = (card) => {
+                if (!card) return;
+                
+                // Find the other side in the master database
+                const nextSide = masterDatabase.value.find(c => c.code === card.linked_to_code || c.linked_to_code === card.code);
+                
+                if (nextSide) {
+                    const cardIndex = cards.value.findIndex(c => c.instanceId === card.instanceId);
+                    if (cardIndex !== -1) {
+                        const existingCard = cards.value[cardIndex];
+                        // Swap out the data while perfectly preserving the positional/state properties
+                        cards.value[cardIndex] = {
+                            ...nextSide,
+                            instanceId: existingCard.instanceId,
+                            zone: existingCard.zone,
+                            x: existingCard.x,
+                            y: existingCard.y,
+                            exhausted: existingCard.exhausted
+                        };
+                    }
+                }
+                closeContextMenu();
+            };
+
             onMounted(() => {
                 const savedCards = localStorage.getItem('mc_cards');
                 if (savedCards) cards.value = JSON.parse(savedCards);
@@ -324,6 +442,9 @@
                 document.addEventListener('gesturestart', preventDefault, captureOpts);
                 document.addEventListener('gesturechange', preventDefault, captureOpts);
                 document.addEventListener('gestureend', preventDefault, captureOpts);
+
+                // Disable native right click anywhere so it doesn't interrupt our custom menu
+                window.addEventListener('contextmenu', (e) => e.preventDefault());
 
                 window.addEventListener('wheel', (e) => {
                     if (e.ctrlKey || e.metaKey) {
@@ -365,8 +486,14 @@
                 }
             };
 
+            const handleContextMenu = (e, card) => {
+                if (dragState.value.isActive) return;
+                openContextMenu(e.clientX, e.clientY, card);
+            };
+
             const handleCardDown = (e, zoneId, card) => {
-                if (e.button === 2) return;
+                if (contextMenu.value.isOpen) return;
+
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -374,6 +501,7 @@
                 activePanZone = zoneId;
 
                 if (pointers.size >= 2) {
+                    clearTimeout(longPressTimer);
                     dragState.value.isActive = false;
                     dragState.value.pending = false;
                     dragState.value.card = null;
@@ -396,6 +524,16 @@
                     currentX: cardScreenX, currentY: cardScreenY,
                     offsetX: e.clientX - cardScreenX, offsetY: e.clientY - cardScreenY
                 };
+
+                longPressTimer = setTimeout(() => {
+                    dragState.value.pending = false; 
+                    
+                    // NEW: Stop tracking this finger for panning so the screen doesn't jump
+                    pointers.delete(e.pointerId);
+                    if (pointers.size === 0) activePanZone = null;
+                    
+                    openContextMenu(e.clientX, e.clientY, card);
+                }, 500); 
             };
 
             const handleZonePointerDown = (e, zoneId) => {
@@ -404,6 +542,7 @@
                 activePanZone = zoneId;
 
                 if (pointers.size === 2) {
+                    clearTimeout(longPressTimer);
                     dragState.value.isActive = false;
                     dragState.value.pending = false;
                     dragState.value.card = null; 
@@ -421,6 +560,8 @@
                 if (dragState.value.pending && !dragState.value.isActive) {
                     const dist = Math.hypot(e.clientX - dragState.value.startX, e.clientY - dragState.value.startY);
                     if (dist > 5) {
+                        // User moved too much, cancel the long press menu trigger
+                        clearTimeout(longPressTimer);
                         dragState.value.isActive = true;
                         dragState.value.pending = false;
                     }
@@ -433,7 +574,6 @@
                     return;
                 }
 
-                // FIX: If we are in the deadzone waiting to see if it's a drag or tap, DO NOT process background panning.
                 if (dragState.value.pending) return;
 
                 if (!pointers.has(e.pointerId)) return;
@@ -471,6 +611,9 @@
             };
 
             const handleGlobalPointerUp = (e) => {
+                // Cancel long press if the user lifts their finger
+                clearTimeout(longPressTimer);
+
                 if (dragState.value.pending && !dragState.value.isActive) {
                     toggleExhaust(dragState.value.card);
                     dragState.value.pending = false;
@@ -520,10 +663,12 @@
             provide('handleZoneWheel', handleZoneWheel);
             provide('handleCardDown', handleCardDown);
             provide('handleZonePointerDown', handleZonePointerDown);
+            provide('handleContextMenu', handleContextMenu);
 
             return {
                 viewports, dragState, resetGame,
-                masterDatabase, dbSyncing, syncDatabase, isVaultOpen, vaultSearch, filteredVault, spawnCard, getColors
+                masterDatabase, dbSyncing, syncDatabase, isVaultOpen, vaultSearch, filteredVault, spawnCard, getColors,
+                contextMenu, closeContextMenu, canFlip, flipCard
             };
         }
     });
