@@ -312,17 +312,17 @@
                 }
 
                 const preventDefault = (e) => e.preventDefault();
-                document.addEventListener('gesturestart', preventDefault);
-                document.addEventListener('gesturechange', preventDefault);
-                document.addEventListener('gestureend', preventDefault);
+                document.addEventListener('gesturestart', preventDefault, { passive: false });
+                document.addEventListener('gesturechange', preventDefault, { passive: false });
+                document.addEventListener('gestureend', preventDefault, { passive: false });
 
                 window.addEventListener('wheel', (e) => {
                     if (e.ctrlKey) e.preventDefault();
                 }, { passive: false });
 
                 window.addEventListener('pointermove', handleGlobalPointerMove, { passive: false });
-                window.addEventListener('pointerup', handleGlobalPointerUp);
-                window.addEventListener('pointercancel', handleGlobalPointerUp);
+                window.addEventListener('pointerup', handleGlobalPointerUp, { passive: false });
+                window.addEventListener('pointercancel', handleGlobalPointerUp, { passive: false });
             });
 
             watch(cards, (newVal) => localStorage.setItem('mc_cards', JSON.stringify(newVal)), { deep: true });
