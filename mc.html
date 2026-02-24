@@ -14,16 +14,11 @@
             background-color: #111827; 
             color: #e2e8f0;
             overflow: hidden; 
-            touch-action: none; /* Disables browser-level zooming/scrolling */
+            touch-action: none; 
             margin: 0;
             user-select: none;
             -webkit-user-select: none;
             font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-        }
-        
-        .grid-pattern {
-            background-image: radial-gradient(#4a5568 1px, transparent 1px);
-            background-size: 20px 20px;
         }
 
         .card-base { will-change: transform, left, top; }
@@ -73,7 +68,7 @@
         <game-zone id="hand" label="HAND" class="h-1/4 bg-gray-800/50"></game-zone>
     </div>
 
-    <div v-if="dragState.isActive" class="fixed inset-0 pointer-events-none z-[100]">
+    <div v-if="dragState.isActive && dragState.card" class="fixed inset-0 pointer-events-none z-[100]">
         <div :style="{ 
                 position: 'absolute', 
                 left: dragState.currentX + 'px', 
@@ -81,7 +76,7 @@
                 transform: `scale(${viewports[dragState.startZone].scale})`,
                 transformOrigin: 'top left'
              }">
-            <game-card :data="dragState.card" class="card-dragging ring-2 ring-white"></game-card>
+            <game-card :data="dragState.card" class="card-dragging ring-2 ring-white" :class="{ 'grayscale opacity-60': dragState.card.exhausted }"></game-card>
         </div>
     </div>
 
@@ -170,7 +165,6 @@
                         </div>
                     </div>
                 </div>
-                <div v-if="data.exhausted" class="absolute inset-0 bg-black/40 pointer-events-none"></div>
             </div>
         `
     };
@@ -183,18 +177,18 @@
             const viewports = inject('viewports');
             const dragState = inject('dragState');
             
-            // These injects were failing because they were never provided!
             const handleCardDown = inject('handleCardDown');
-            const toggleExhaust = inject('toggleExhaust');
             const handleZonePointerDown = inject('handleZonePointerDown');
             const handleZoneWheel = inject('handleZoneWheel');
 
             const vp = computed(() => viewports.value[props.id]);
+            
+            // Fix: Added safety check for drag state to ensure un-dragged cards always render
             const zoneCards = computed(() => 
-                cards.value.filter(c => c.zone === props.id && c.instanceId !== dragState.value.card?.instanceId)
+                cards.value.filter(c => c.zone === props.id && (!dragState.value.isActive || c.instanceId !== dragState.value.card?.instanceId))
             );
 
-            return { vp, zoneCards, handleCardDown, toggleExhaust, handleZonePointerDown, handleZoneWheel };
+            return { vp, zoneCards, handleCardDown, handleZonePointerDown, handleZoneWheel };
         },
         template: `
             <div :id="id" class="relative overflow-hidden border-b border-gray-700 select-none"
@@ -205,13 +199,20 @@
                     {{ label }} {{ vp.scale.toFixed(2) }}x
                 </div>
                 
-                <div class="absolute inset-0 grid-pattern origin-top-left" 
+                <div class="absolute inset-0 pointer-events-none" 
+                     :style="{ 
+                        backgroundImage: 'radial-gradient(circle at 1px 1px, #4a5568 1.5px, transparent 0)',
+                        backgroundSize: (20 * vp.scale) + 'px ' + (20 * vp.scale) + 'px',
+                        backgroundPosition: vp.x + 'px ' + vp.y + 'px'
+                     }"></div>
+                
+                <div class="absolute inset-0 origin-top-left" 
                      :style="{ transform: \`translate(\${vp.x}px, \${vp.y}px) scale(\${vp.scale})\` }">
                     <div v-for="c in zoneCards" :key="c.instanceId" 
                          @pointerdown.stop="handleCardDown($event, id, c)"
-                         @contextmenu.prevent="toggleExhaust(c)"
-                         class="absolute cursor-grab active:cursor-grabbing" 
-                         :style="{ left: c.x + 'px', top: c.y + 'px', transform: c.exhausted ? 'rotate(90deg)' : 'none' }">
+                         class="absolute cursor-grab active:cursor-grabbing transition duration-300"
+                         :class="{ 'grayscale opacity-60': c.exhausted }" 
+                         :style="{ left: c.x + 'px', top: c.y + 'px' }">
                         <game-card :data="c" class="card-shadow hover:ring-2 ring-blue-400"></game-card>
                     </div>
                 </div>
@@ -223,7 +224,6 @@
     const app = createApp({
         components: { GameZone, GameCard },
         setup() {
-            // App State
             const viewports = ref({
                 villain: { x: 0, y: 0, scale: 0.8 },
                 play:    { x: 0, y: 0, scale: 1.0 },
@@ -234,7 +234,6 @@
                 isActive: false, card: null, startZone: null, currentX: 0, currentY: 0, offsetX: 0, offsetY: 0
             });
 
-            // Vault / API State
             const masterDatabase = ref([]);
             const dbSyncing = ref(false);
             const isVaultOpen = ref(false);
@@ -244,14 +243,13 @@
             provide('viewports', viewports);
             provide('dragState', dragState);
 
-            // Engine Tracking
             const pointers = new Map();
             let activePanZone = null;
             let lastPinchDist = 0;
             let lastPanMidX = 0;
             let lastPanMidY = 0;
+            let lastTap = { time: 0, instanceId: null }; // Tracks double-taps
 
-            // --- DATABASE LOGIC ---
             const syncDatabase = async () => {
                 dbSyncing.value = true;
                 try {
@@ -259,17 +257,9 @@
                     const rawData = await response.json();
                     
                     const prunedData = rawData.map(c => ({
-                        code: c.code,
-                        name: c.name,
-                        type_code: c.type_code,
-                        faction_code: c.faction_code,
-                        cost: c.cost,
-                        text: c.text,
-                        traits: c.traits,
-                        attack: c.attack,
-                        thwart: c.thwart,
-                        defense: c.defense,
-                        health: c.health
+                        code: c.code, name: c.name, type_code: c.type_code, faction_code: c.faction_code,
+                        cost: c.cost, text: c.text, traits: c.traits, attack: c.attack, thwart: c.thwart, 
+                        defense: c.defense, health: c.health
                     }));
 
                     masterDatabase.value = prunedData;
@@ -310,7 +300,6 @@
 
             const resetGame = () => cards.value = [];
 
-            // --- INIT ---
             onMounted(() => {
                 const savedCards = localStorage.getItem('mc_cards');
                 if (savedCards) cards.value = JSON.parse(savedCards);
@@ -322,6 +311,15 @@
                     syncDatabase();
                 }
 
+                const preventDefault = (e) => e.preventDefault();
+                document.addEventListener('gesturestart', preventDefault);
+                document.addEventListener('gesturechange', preventDefault);
+                document.addEventListener('gestureend', preventDefault);
+
+                window.addEventListener('wheel', (e) => {
+                    if (e.ctrlKey) e.preventDefault();
+                }, { passive: false });
+
                 window.addEventListener('pointermove', handleGlobalPointerMove, { passive: false });
                 window.addEventListener('pointerup', handleGlobalPointerUp);
                 window.addEventListener('pointercancel', handleGlobalPointerUp);
@@ -329,7 +327,6 @@
 
             watch(cards, (newVal) => localStorage.setItem('mc_cards', JSON.stringify(newVal)), { deep: true });
 
-            // --- GESTURE LOGIC ---
             const applyZoom = (zoneId, scaleMultiplier, pointerX, pointerY) => {
                 const vp = viewports.value[zoneId];
                 const newScale = Math.min(Math.max(0.2, vp.scale * scaleMultiplier), 4);
@@ -348,12 +345,10 @@
                 e.preventDefault();
                 const vp = viewports.value[zoneId];
                 
-                // Trackpad pinch translates to wheel + ctrlKey
                 if (e.ctrlKey) {
                     const rect = document.getElementById(zoneId).getBoundingClientRect();
                     applyZoom(zoneId, e.deltaY > 0 ? 0.95 : 1.05, e.clientX - rect.left, e.clientY - rect.top);
                 } else {
-                    // Standard Trackpad 2-finger scroll or Mouse Wheel -> Pan 1:1
                     vp.x -= e.deltaX;
                     vp.y -= e.deltaY;
                 }
@@ -362,6 +357,35 @@
             const handleCardDown = (e, zoneId, card) => {
                 if (e.button === 2) return;
                 e.preventDefault();
+                e.stopPropagation();
+
+                // Custom Double-Tap Logic to bypass pointerdown interference
+                const now = Date.now();
+                if (now - lastTap.time < 300 && lastTap.instanceId === card.instanceId) {
+                    toggleExhaust(card);
+                    dragState.value.isActive = false;
+                    dragState.value.card = null;
+                    lastTap.time = 0; // Reset
+                    return;
+                }
+                lastTap = { time: now, instanceId: card.instanceId };
+
+                pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                activePanZone = zoneId;
+
+                // Check for pinch-to-zoom over a card
+                if (pointers.size >= 2) {
+                    dragState.value.isActive = false;
+                    dragState.value.card = null; // Fix: Clear the card so it renders back in the zone immediately
+                    
+                    const pts = Array.from(pointers.values());
+                    lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                    lastPanMidX = (pts[0].x + pts[1].x) / 2;
+                    lastPanMidY = (pts[0].y + pts[1].y) / 2;
+                    return; 
+                }
+
+                // Normal Drag Setup
                 const vp = viewports.value[zoneId];
                 const rect = document.getElementById(zoneId).getBoundingClientRect();
                 const cardScreenX = rect.left + vp.x + (card.x * vp.scale);
@@ -379,6 +403,8 @@
                 activePanZone = zoneId;
 
                 if (pointers.size === 2) {
+                    dragState.value.isActive = false;
+                    dragState.value.card = null; 
                     const pts = Array.from(pointers.values());
                     lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
                     lastPanMidX = (pts[0].x + pts[1].x) / 2;
@@ -473,7 +499,6 @@
                 }
             };
 
-            provide('toggleExhaust', toggleExhaust);
             provide('handleZoneWheel', handleZoneWheel);
             provide('handleCardDown', handleCardDown);
             provide('handleZonePointerDown', handleZonePointerDown);
