@@ -436,7 +436,8 @@
                                 thwart: c.thwart, 
                                 defense: c.defense, 
                                 health: c.health,
-                                linked_to_code: c.linked_to_code,   
+                                permanent: c.permanent,
+                                linked_to_code: c.linked_to_code,
                                 pack_names: c.pack_name ? [c.pack_name] : [] 
                             });
                         } else {
@@ -512,8 +513,7 @@
                         // Plain Text Parsing
                         const lines = importInput.value.split('\n').map(l => l.trim()).filter(l => l);
                         const regex = /^(\d+)x\s+(.+?)(?:\s+\((.+?)\))?$/;
-                        
-                        // FEATURE 1: Check ONLY the first two non-empty lines for the hero
+
                         for (let i = 0; i < Math.min(2, lines.length); i++) {
                             const possibleHero = masterDatabase.value.find(c => c.name.toLowerCase() === lines[i].toLowerCase() && (c.type_code === 'hero' || c.type_code === 'alter_ego'));
                             if (possibleHero) {
@@ -563,9 +563,9 @@
 
             const spawnDeckPile = (deckArray, heroName = "Unknown") => {
                 const heroes = deckArray.filter(c => c.type_code === 'hero' || c.type_code === 'alter_ego');
-                const restOfDeck = shuffleArray(deckArray.filter(c => c.type_code !== 'hero' && c.type_code !== 'alter_ego'));
+                const permanents = deckArray.filter(c => c.permanent);
+                const restOfDeck = shuffleArray(deckArray.filter(c => c.type_code !== 'hero' && c.type_code !== 'alter_ego' && !c.permanent));
 
-                // FEATURE 5: Assign internal owner string
                 restOfDeck.forEach(c => c.owner = heroName);
 
                 const targetZone = 'hand';
@@ -575,7 +575,6 @@
                 const centerX = (rect.width / 2 - vp.x) / vp.scale;
                 const centerY = (rect.height / 2 - vp.y) / vp.scale;
 
-                // FEATURE 3: Ensure spawned hero is the alter_ego form
                 heroes.forEach((h, idx) => {
                     let cardToSpawn = h;
                     if (h.type_code === 'hero') {
@@ -586,13 +585,18 @@
                     spawnCard(cardToSpawn, 'play', (centerX - 64) + (idx * 140), centerY - 88);
                 });
 
+                permanents.forEach((p, idx) => {
+                    p.owner = heroName;
+                    spawnCard(p, 'play', (centerX - 64) + ((idx + heroes.length) * 140), centerY - 88);
+                });
+
                 if (restOfDeck.length > 0) {
                     cards.value.push({
                         instanceId: generateId(),
                         isPile: true,
-                        owner: heroName, // FEATURE 2 & 5: Bind name to the pile
+                        owner: heroName,
                         zone: targetZone,
-                        x: centerX - 200, // Offset to the left a bit
+                        x: centerX - 200,
                         y: centerY - 88,
                         pileCards: restOfDeck
                     });
@@ -621,11 +625,8 @@
                     genericCounters: 0,
                     tokens: { confused: 0, stunned: 0, tough: 0 }
                 });
-
-                // FEATURE 4: We do not splice out the empty deck pile! It stays persistent.
             };
 
-            // Enhanced spawnCard to accept optional zone/x/y
             const spawnCard = (baseCard, forceZone = null, forceX = null, forceY = null) => {
                 const targetZone = forceZone || 'play';
                 const vp = viewports.value[targetZone];
