@@ -92,20 +92,70 @@
          class="fixed inset-0 z-[199]"></div>
 
     <div v-if="contextMenu.isOpen" 
-         class="fixed z-[200] bg-gray-800 border border-gray-600 rounded shadow-2xl flex flex-col overflow-hidden min-w-[180px] origin-top-left"
+         class="fixed z-[200] bg-gray-800 border border-gray-600 rounded shadow-2xl flex flex-col overflow-hidden min-w-[220px] origin-top-left"
          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
+         
         <div class="px-4 py-2 bg-gray-900 border-b border-gray-700 text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">
             {{ contextMenu.card.name }}
         </div>
         
         <button v-if="canFlip(contextMenu.card)" 
                 @click="flipCard(contextMenu.card)" 
-                class="px-4 py-4 text-left text-sm text-white hover:bg-indigo-600 active:bg-indigo-700 flex items-center gap-3 transition-colors">
+                class="px-4 py-3 text-left text-sm text-gray-200 hover:text-white hover:bg-indigo-600 active:bg-indigo-700 flex items-center gap-3 border-b border-gray-700 transition-colors">
             <i class="fas fa-sync-alt w-4 text-center"></i> Flip Card
         </button>
         
-        <button class="px-4 py-4 text-left text-sm text-gray-500 flex items-center gap-3 cursor-not-allowed">
-            <i class="fas fa-plus-circle w-4 text-center"></i> Add Damage
+        <div v-if="isCharacter(contextMenu.card)" class="px-4 py-3 border-b border-gray-700 flex items-center justify-between hover:bg-gray-700/30 transition-colors">
+            <span class="text-sm text-gray-300 flex items-center gap-2"><i class="fas fa-heart text-red-500 w-4 text-center"></i> Health</span>
+            <div class="flex items-center gap-3 bg-gray-900 rounded px-2 py-1 shadow-inner border border-gray-600">
+                <button @click.stop="modifyHealth(-1)" class="w-6 h-6 rounded bg-red-900 hover:bg-red-700 text-white flex items-center justify-center transition focus:ring-2 ring-red-400" title="Take Damage"><i class="fas fa-minus text-[10px]"></i></button>
+                <span class="w-6 text-center font-bold text-white text-sm">{{ contextMenu.card.currentHealth !== undefined ? contextMenu.card.currentHealth : contextMenu.card.health }}</span>
+                <button @click.stop="modifyHealth(1)" class="w-6 h-6 rounded bg-green-900 hover:bg-green-700 text-white flex items-center justify-center transition focus:ring-2 ring-green-400" title="Heal"><i class="fas fa-plus text-[10px]"></i></button>
+            </div>
+        </div>
+
+        <div v-if="isCharacter(contextMenu.card)" class="px-4 py-3 border-b border-gray-700 flex flex-col gap-2.5 hover:bg-gray-700/30 transition-colors">
+            <span class="text-sm text-gray-300 flex items-center gap-2 mb-1"><i class="fas fa-tags text-gray-400 w-4 text-center"></i> Statuses</span>
+            
+            <div class="flex items-center justify-between pl-6">
+                <span class="text-xs text-purple-300 font-bold">Confused</span>
+                <div class="flex items-center gap-2 bg-gray-900 rounded px-1.5 py-0.5 shadow-inner border border-gray-600">
+                    <button @click.stop="modifyToken('confused', -1)" class="w-5 h-5 rounded bg-gray-700 hover:bg-gray-500 text-white flex items-center justify-center transition"><i class="fas fa-minus text-[8px]"></i></button>
+                    <span class="w-4 text-center font-bold text-white text-xs">{{ contextMenu.card.tokens?.confused || 0 }}</span>
+                    <button @click.stop="modifyToken('confused', 1)" class="w-5 h-5 rounded bg-purple-900 hover:bg-purple-700 text-white flex items-center justify-center transition"><i class="fas fa-plus text-[8px]"></i></button>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pl-6">
+                <span class="text-xs text-green-300 font-bold">Stunned</span>
+                <div class="flex items-center gap-2 bg-gray-900 rounded px-1.5 py-0.5 shadow-inner border border-gray-600">
+                    <button @click.stop="modifyToken('stunned', -1)" class="w-5 h-5 rounded bg-gray-700 hover:bg-gray-500 text-white flex items-center justify-center transition"><i class="fas fa-minus text-[8px]"></i></button>
+                    <span class="w-4 text-center font-bold text-white text-xs">{{ contextMenu.card.tokens?.stunned || 0 }}</span>
+                    <button @click.stop="modifyToken('stunned', 1)" class="w-5 h-5 rounded bg-green-900 hover:bg-green-700 text-white flex items-center justify-center transition"><i class="fas fa-plus text-[8px]"></i></button>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pl-6">
+                <span class="text-xs text-red-300 font-bold">Tough</span>
+                <div class="flex items-center gap-2 bg-gray-900 rounded px-1.5 py-0.5 shadow-inner border border-gray-600">
+                    <button @click.stop="modifyToken('tough', -1)" class="w-5 h-5 rounded bg-gray-700 hover:bg-gray-500 text-white flex items-center justify-center transition"><i class="fas fa-minus text-[8px]"></i></button>
+                    <span class="w-4 text-center font-bold text-white text-xs">{{ contextMenu.card.tokens?.tough || 0 }}</span>
+                    <button @click.stop="modifyToken('tough', 1)" class="w-5 h-5 rounded bg-red-900 hover:bg-red-700 text-white flex items-center justify-center transition"><i class="fas fa-plus text-[8px]"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between hover:bg-gray-700/30 transition-colors">
+            <span class="text-sm text-gray-300 flex items-center gap-2"><i class="fas fa-circle-notch text-blue-400 w-4 text-center"></i> Counters&nbsp;</span>
+            <div class="flex items-center gap-3 bg-gray-900 rounded px-2 py-1 shadow-inner border border-gray-600">
+                <button @click.stop="modifyCounters(-1)" class="w-6 h-6 rounded bg-gray-700 hover:bg-gray-500 text-white flex items-center justify-center transition focus:ring-2 ring-gray-400"><i class="fas fa-minus text-[10px]"></i></button>
+                <span class="w-6 text-center font-bold text-white text-sm">{{ contextMenu.card.genericCounters || 0 }}</span>
+                <button @click.stop="modifyCounters(1)" class="w-6 h-6 rounded bg-blue-800 hover:bg-blue-600 text-white flex items-center justify-center transition focus:ring-2 ring-blue-400"><i class="fas fa-plus text-[10px]"></i></button>
+            </div>
+        </div>
+
+        <button @click="deleteCard" class="px-4 py-3 text-left text-sm text-red-400 hover:text-white hover:bg-red-600 flex items-center gap-3 transition-colors">
+            <i class="fas fa-trash-alt w-4 text-center"></i> Delete Card
         </button>
     </div>
 
@@ -171,27 +221,44 @@
             return { colors, hasStats };
         },
         template: `
-            <div class="absolute w-32 h-44 rounded-lg flex flex-col overflow-hidden border-2 card-base bg-white"
+            <div class="absolute w-32 h-44 rounded-lg flex flex-col overflow-visible border-2 card-base bg-white"
                  :class="[colors.border]">
-                <div class="text-white text-[10px] font-bold px-1 py-1 flex justify-between items-center" :class="colors.header">
+                 
+                <div class="absolute top-6 -left-3 flex flex-col gap-1.5 z-20 pointer-events-none">
+                    <div v-if="data.tokens?.confused > 0" class="bg-purple-200 border border-purple-400 text-purple-900 text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm transform -rotate-6 whitespace-nowrap">
+                        CONFUSED <span v-if="data.tokens.confused > 1" class="ml-0.5">x{{data.tokens.confused}}</span>
+                    </div>
+                    <div v-if="data.tokens?.stunned > 0" class="bg-green-200 border border-green-400 text-green-900 text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm transform -rotate-6 whitespace-nowrap">
+                        STUNNED <span v-if="data.tokens.stunned > 1" class="ml-0.5">x{{data.tokens.stunned}}</span>
+                    </div>
+                    <div v-if="data.tokens?.tough > 0" class="bg-red-200 border border-red-400 text-red-900 text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm transform -rotate-6 whitespace-nowrap">
+                        TOUGH <span v-if="data.tokens.tough > 1" class="ml-0.5">x{{data.tokens.tough}}</span>
+                    </div>
+                </div>
+
+                <div class="text-white text-[10px] font-bold px-1 py-1 flex justify-between items-center overflow-hidden rounded-t-[6px]" :class="colors.header">
                     <span class="truncate pr-1">{{ data.name }}</span>
                     <span v-if="data.cost !== undefined" class="bg-white text-black rounded-full w-4 h-4 flex items-center justify-center text-[9px] flex-shrink-0">{{ data.cost }}</span>
                 </div>
                 
-                <div v-if="hasStats" class="flex justify-around bg-gray-100 border-b border-gray-300 text-[9px] font-black py-0.5">
+                <div v-if="hasStats" class="flex justify-around bg-gray-100 border-b border-gray-300 text-[9px] font-black py-0.5 z-10 relative">
                     <span v-if="data.thwart !== undefined" title="Thwart" class="text-blue-800">THW: {{data.thwart}}</span>
                     <span v-if="data.attack !== undefined" title="Attack" class="text-red-800">ATK: {{data.attack}}</span>
                     <span v-if="data.defense !== undefined" title="Defense" class="text-green-800">DEF: {{data.defense}}</span>
                 </div>
 
-                <div class="flex-1 p-1 flex flex-col relative" :class="colors.bg">
+                <div class="flex-1 p-1 flex flex-col relative rounded-b-[6px] overflow-hidden" :class="colors.bg">
                     <div class="flex-1 bg-white/70 rounded p-1 border border-black/10 overflow-hidden pointer-events-none flex flex-col relative">
                         <div class="text-[9px] italic text-gray-700 mb-1 truncate">{{ data.traits || '&nbsp;' }}</div>
                         <div class="text-[8px] leading-tight flex-1 overflow-hidden" :class="colors.text" v-html="data.text"></div>
                         
-                        <div v-if="data.health !== undefined" class="absolute bottom-0 right-0 bg-red-600 text-white rounded-tl-lg rounded-br w-6 h-5 flex items-center justify-center text-[10px] font-bold border-l border-t border-red-800 shadow-sm">
-                            {{ data.health }}
+                        <div v-if="data.genericCounters > 0" class="absolute top-0 right-0 bg-blue-600 text-white rounded-bl shadow flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-[10px] font-bold border-l border-b border-blue-800 z-10">
+                            {{ data.genericCounters }}
                         </div>
+                    </div>
+                    
+                    <div v-if="data.currentHealth !== undefined || data.health !== undefined" class="absolute bottom-0 right-0 bg-red-600 text-white rounded-tl-lg w-6 h-5 flex items-center justify-center text-[10px] font-bold border-l border-t border-red-800 shadow-sm z-10">
+                        {{ data.currentHealth !== undefined ? data.currentHealth : data.health }}
                     </div>
                 </div>
             </div>
@@ -207,7 +274,7 @@
             const dragState = inject('dragState');
             
             const handleCardDown = inject('handleCardDown');
-            const handleContextMenu = inject('handleContextMenu'); // Inject the new handler
+            const handleContextMenu = inject('handleContextMenu'); 
             const handleZonePointerDown = inject('handleZonePointerDown');
             const handleZoneWheel = inject('handleZoneWheel');
 
@@ -288,7 +355,7 @@
             let lastPinchDist = 0;
             let lastPanMidX = 0;
             let lastPanMidY = 0;
-            let longPressTimer = null; // Timer for the context menu
+            let longPressTimer = null; 
 
             const syncDatabase = async () => {
                 dbSyncing.value = true;
@@ -365,7 +432,10 @@
                     zone: targetZone,
                     x: centerX - 64, 
                     y: centerY - 88, 
-                    exhausted: false
+                    exhausted: false,
+                    currentHealth: baseCard.health !== undefined ? parseInt(baseCard.health, 10) : undefined,
+                    genericCounters: 0,
+                    tokens: { confused: 0, stunned: 0, tough: 0 }
                 });
             };
 
@@ -373,11 +443,10 @@
 
             // --- CONTEXT MENU LOGIC ---
             const openContextMenu = (x, y, card) => {
-                // Prevent menu from overflowing off the screen edge
                 let finalX = x;
                 let finalY = y;
-                const menuWidth = 180;
-                const expectedHeight = 120; // approximate height with 2 items
+                const menuWidth = 220;
+                const expectedHeight = 360; 
 
                 if (x + menuWidth > window.innerWidth) finalX = window.innerWidth - menuWidth - 10;
                 if (y + expectedHeight > window.innerHeight) finalY = window.innerHeight - expectedHeight - 10;
@@ -397,28 +466,77 @@
 
             const canFlip = (card) => {
                 if (!card) return false;
-                // It can flip if it links to something, or something links to it.
                 return !!masterDatabase.value.find(c => c.code === card.linked_to_code || c.linked_to_code === card.code);
+            };
+            
+            const isCharacter = (card) => {
+                if (!card) return false;
+                return ['hero', 'alter_ego', 'ally'].includes(card.type_code);
+            };
+
+            const modifyHealth = (amount) => {
+                if (!contextMenu.value.card) return;
+                const target = cards.value.find(c => c.instanceId === contextMenu.value.card.instanceId);
+                if (target) {
+                    if (target.currentHealth === undefined) target.currentHealth = parseInt(target.health || 0, 10);
+                    target.currentHealth += amount;
+                }
+            };
+
+            const modifyCounters = (amount) => {
+                if (!contextMenu.value.card) return;
+                const target = cards.value.find(c => c.instanceId === contextMenu.value.card.instanceId);
+                if (target) {
+                    target.genericCounters = (target.genericCounters || 0) + amount;
+                    if (target.genericCounters < 0) target.genericCounters = 0; 
+                }
+            };
+
+            const modifyToken = (tokenType, amount) => {
+                if (!contextMenu.value.card) return;
+                const target = cards.value.find(c => c.instanceId === contextMenu.value.card.instanceId);
+                if (target) {
+                    if (!target.tokens) target.tokens = { confused: 0, stunned: 0, tough: 0 };
+                    target.tokens[tokenType] = (target.tokens[tokenType] || 0) + amount;
+                    if (target.tokens[tokenType] < 0) target.tokens[tokenType] = 0;
+                }
+            };
+
+            const deleteCard = () => {
+                if (!contextMenu.value.card) return;
+                const index = cards.value.findIndex(c => c.instanceId === contextMenu.value.card.instanceId);
+                if (index !== -1) {
+                    cards.value.splice(index, 1);
+                }
+                closeContextMenu();
             };
 
             const flipCard = (card) => {
                 if (!card) return;
                 
-                // Find the other side in the master database
                 const nextSide = masterDatabase.value.find(c => c.code === card.linked_to_code || c.linked_to_code === card.code);
                 
                 if (nextSide) {
                     const cardIndex = cards.value.findIndex(c => c.instanceId === card.instanceId);
                     if (cardIndex !== -1) {
                         const existingCard = cards.value[cardIndex];
-                        // Swap out the data while perfectly preserving the positional/state properties
+                        
+                        let calculatedNewHealth = undefined;
+                        if (existingCard.currentHealth !== undefined && existingCard.health !== undefined && nextSide.health !== undefined) {
+                            const damageTaken = parseInt(existingCard.health, 10) - existingCard.currentHealth;
+                            calculatedNewHealth = parseInt(nextSide.health, 10) - damageTaken;
+                        }
+
                         cards.value[cardIndex] = {
                             ...nextSide,
                             instanceId: existingCard.instanceId,
                             zone: existingCard.zone,
                             x: existingCard.x,
                             y: existingCard.y,
-                            exhausted: existingCard.exhausted
+                            exhausted: existingCard.exhausted,
+                            currentHealth: calculatedNewHealth !== undefined ? calculatedNewHealth : existingCard.currentHealth,
+                            genericCounters: existingCard.genericCounters || 0,
+                            tokens: existingCard.tokens || { confused: 0, stunned: 0, tough: 0 }
                         };
                     }
                 }
@@ -443,7 +561,6 @@
                 document.addEventListener('gesturechange', preventDefault, captureOpts);
                 document.addEventListener('gestureend', preventDefault, captureOpts);
 
-                // Disable native right click anywhere so it doesn't interrupt our custom menu
                 window.addEventListener('contextmenu', (e) => e.preventDefault());
 
                 window.addEventListener('wheel', (e) => {
@@ -533,7 +650,6 @@
                 longPressTimer = setTimeout(() => {
                     dragState.value.pending = false; 
                     
-                    // NEW: Stop tracking this finger for panning so the screen doesn't jump
                     pointers.delete(e.pointerId);
                     if (pointers.size === 0) activePanZone = null;
                     
@@ -565,7 +681,6 @@
                 if (dragState.value.pending && !dragState.value.isActive) {
                     const dist = Math.hypot(e.clientX - dragState.value.startX, e.clientY - dragState.value.startY);
                     if (dist > 5) {
-                        // User moved too much, cancel the long press menu trigger
                         clearTimeout(longPressTimer);
                         dragState.value.isActive = true;
                         dragState.value.pending = false;
@@ -616,7 +731,6 @@
             };
 
             const handleGlobalPointerUp = (e) => {
-                // Cancel long press if the user lifts their finger
                 clearTimeout(longPressTimer);
 
                 if (dragState.value.pending && !dragState.value.isActive) {
@@ -673,7 +787,8 @@
             return {
                 viewports, dragState, resetGame,
                 masterDatabase, dbSyncing, syncDatabase, isVaultOpen, vaultSearch, filteredVault, spawnCard, getColors,
-                contextMenu, closeContextMenu, canFlip, flipCard
+                contextMenu, closeContextMenu, canFlip, flipCard,
+                isCharacter, modifyHealth, modifyCounters, modifyToken, deleteCard
             };
         }
     });
