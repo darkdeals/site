@@ -1,8 +1,0 @@
-{
-  "name": "Marvel Champions: Digital Playmat",
-  "short_name": "MC Playmat",
-  "start_url": "./",
-  "display": "standalone",
-  "background_color": "#111827",
-  "theme_color": "#1f2937"
-}
