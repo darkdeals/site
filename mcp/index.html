@@ -487,12 +487,17 @@
             };
 
             const handleContextMenu = (e, card) => {
-                if (dragState.value.isActive) return;
+                if (dragState.value.isActive) return; 
+
+                dragState.value.pending = false;
+                clearTimeout(longPressTimer);
+                
                 openContextMenu(e.clientX, e.clientY, card);
             };
 
+
             const handleCardDown = (e, zoneId, card) => {
-                if (contextMenu.value.isOpen) return;
+                if (contextMenu.value.isOpen || e.button === 2 || e.ctrlKey) return;
 
                 e.preventDefault();
                 e.stopPropagation();
