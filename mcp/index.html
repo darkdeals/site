@@ -72,7 +72,7 @@
         </div>
     </div>
 
-    <div v-if="showImportModal" class="fixed inset-0 z-[300] bg-black/70 flex items-center justify-center p-4">
+    <div v-if="showImportModal" class="fixed inset-0 z-[300] bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm">
         <div class="bg-gray-800 border border-gray-600 rounded-lg shadow-2xl w-full max-w-lg flex flex-col">
             <div class="px-4 py-3 border-b border-gray-700 flex justify-between items-center bg-gray-900 rounded-t-lg">
                 <h3 class="font-bold text-white"><i class="fas fa-layer-group text-emerald-500 mr-2"></i> Import Deck</h3>
@@ -90,6 +90,67 @@
                 </button>
             </div>
         </div>
+    </div>
+
+    <div v-if="pileBrowser.isOpen" class="fixed inset-0 z-[250] bg-black/85 flex flex-col p-4 md:p-8 backdrop-blur-md">
+        <div class="flex justify-between items-center bg-gray-800 p-4 rounded-t-lg border border-gray-600 border-b-0 shadow-lg">
+            <h2 class="text-xl font-bold text-white flex items-center gap-3">
+                <i class="fas" :class="pileBrowser.pile.isDiscard ? 'fa-trash text-gray-400' : 'fa-layer-group text-emerald-400'"></i>
+                Browsing {{ pileBrowser.pile.owner ? pileBrowser.pile.owner + "'s " : '' }}{{ pileBrowser.pile.isDiscard ? 'Discard' : 'Deck' }}
+                <span class="text-sm font-normal text-gray-400 ml-2 bg-gray-900 px-2 py-0.5 rounded-full border border-gray-700">{{ pileBrowser.pile.pileCards.length }}</span>
+            </h2>
+            <div class="flex items-center gap-3">
+                <button @click="shuffleBrowserPile" class="px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 transition rounded text-white flex items-center gap-2 shadow">
+                    <i class="fas fa-random"></i> Shuffle
+                </button>
+                <div class="w-px h-6 bg-gray-600"></div>
+                <button @click="closePileBrowser" class="w-8 h-8 rounded bg-gray-700 hover:bg-red-600 text-white flex items-center justify-center transition shadow"><i class="fas fa-times"></i></button>
+            </div>
+        </div>
+        
+        <div class="bg-gray-800 p-3 border-x border-gray-600 shadow-md">
+            <div class="relative max-w-md">
+                <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 text-sm"></i>
+                <input v-model="pileBrowser.searchQuery" type="text" placeholder="Filter cards in pile..." class="w-full bg-gray-900 text-white text-sm rounded pl-9 pr-3 py-2 border border-gray-600 focus:outline-none focus:border-emerald-500 transition">
+            </div>
+        </div>
+
+        <div class="flex-1 bg-gray-900 border border-gray-600 rounded-b-lg p-6 overflow-y-auto shadow-inner" @pointerdown="closeBrowserMenu">
+            <div v-if="filteredBrowserCards.length === 0" class="text-center text-gray-500 mt-10 italic">No matching cards found.</div>
+            <div class="flex flex-wrap gap-4 justify-center">
+                <div v-for="(card, idx) in filteredBrowserCards" :key="idx" 
+                     @pointerdown.stop.prevent="openBrowserMenu($event, card, idx)"
+                     class="cursor-pointer hover:-translate-y-2 transition-transform duration-200 group">
+                    <game-card :data="card" class="card-shadow group-hover:ring-2 ring-emerald-400"></game-card>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div v-if="browserMenu.isOpen" 
+         class="fixed z-[260] bg-gray-800 border border-gray-600 rounded shadow-2xl flex flex-col overflow-hidden min-w-[220px] origin-top-left"
+         :style="{ left: browserMenu.x + 'px', top: browserMenu.y + 'px' }">
+        
+        <div class="px-3 py-2 bg-gray-900 border-b border-gray-700 text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">
+            {{ browserMenu.card.name }}
+        </div>
+        
+        <button @click="moveBrowserCard('hand')" class="px-4 py-3 text-left text-sm text-gray-200 hover:text-white hover:bg-blue-600 flex items-center gap-3 border-b border-gray-700 transition">
+            <i class="fas fa-hand-paper w-4 text-center"></i> Move to Hand
+        </button>
+        <button @click="moveBrowserCard('play')" class="px-4 py-3 text-left text-sm text-gray-200 hover:text-white hover:bg-emerald-600 flex items-center gap-3 border-b border-gray-700 transition">
+            <i class="fas fa-desktop w-4 text-center"></i> Move to Play Area
+        </button>
+        <button @click="moveBrowserCard('villain')" class="px-4 py-3 text-left text-sm text-gray-200 hover:text-white hover:bg-purple-600 flex items-center gap-3 border-b border-gray-700 transition">
+            <i class="fas fa-skull w-4 text-center"></i> Move to Villain
+        </button>
+        
+        <button v-if="pileBrowser.pile.isDiscard" @click="moveBrowserCard('deck')" class="px-4 py-3 text-left text-sm text-emerald-400 hover:text-white hover:bg-emerald-700 flex items-center gap-3 transition">
+            <i class="fas fa-layer-group w-4 text-center"></i> Return to Deck
+        </button>
+        <button v-if="!pileBrowser.pile.isDiscard" @click="moveBrowserCard('discard')" class="px-4 py-3 text-left text-sm text-gray-400 hover:text-white hover:bg-gray-700 flex items-center gap-3 transition">
+            <i class="fas fa-trash w-4 text-center"></i> Move to Discard
+        </button>
     </div>
 
     <div class="flex-1 flex flex-col min-h-0 relative">
@@ -120,9 +181,18 @@
          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
          
         <div class="px-4 py-2 bg-gray-900 border-b border-gray-700 text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">
-            {{ contextMenu.card.isPile ? 'Deck Pile' : contextMenu.card.name }}
+            {{ contextMenu.card.isPile ? (contextMenu.card.isDiscard ? 'Discard Pile' : 'Deck Pile') : contextMenu.card.name }}
         </div>
         
+        <template v-if="contextMenu.card.isPile">
+            <button @click="openPileBrowserFromMenu" class="px-4 py-3 text-left text-sm text-emerald-400 hover:text-white hover:bg-emerald-600 active:bg-emerald-700 flex items-center gap-3 border-b border-gray-700 transition-colors">
+                <i class="fas fa-search w-4 text-center"></i> Browse / Search
+            </button>
+            <button @click="shuffleContextMenuPile" class="px-4 py-3 text-left text-sm text-blue-400 hover:text-white hover:bg-blue-600 active:bg-blue-700 flex items-center gap-3 border-b border-gray-700 transition-colors">
+                <i class="fas fa-random w-4 text-center"></i> Shuffle Pile
+            </button>
+        </template>
+
         <template v-if="!contextMenu.card.isPile">
             <button v-if="canFlip(contextMenu.card)" 
                     @click="flipCard(contextMenu.card)" 
@@ -181,7 +251,8 @@
         </template>
 
         <button @click="deleteCard" class="px-4 py-3 text-left text-sm text-red-400 hover:text-white hover:bg-red-600 flex items-center gap-3 transition-colors">
-            <i class="fas fa-trash-alt w-4 text-center"></i> {{ contextMenu.card.isPile ? 'Delete Pile' : 'Delete Card' }}
+            <i class="fas" :class="contextMenu.card.owner && !contextMenu.card.isPile ? 'fa-inbox' : 'fa-trash-alt'" class="w-4 text-center"></i> 
+            {{ contextMenu.card.isPile ? (contextMenu.card.isDiscard ? 'Delete Discard Pile' : 'Delete Deck & Clean Play Area') : (contextMenu.card.owner ? 'Discard Card' : 'Delete Card') }}
         </button>
     </div>
 
@@ -247,7 +318,7 @@
             return { colors, hasStats };
         },
         template: `
-            <div class="absolute w-32 h-44 rounded-lg flex flex-col overflow-visible border-2 card-base bg-white"
+            <div class="w-32 h-44 shrink-0 rounded-lg flex flex-col overflow-visible border-2 card-base bg-white"
                  :class="[colors.border]">
                  
                 <div class="absolute top-6 -left-3 flex flex-col gap-1.5 z-20 pointer-events-none">
@@ -259,6 +330,21 @@
                     </div>
                     <div v-if="data.tokens?.tough > 0" class="bg-red-200 border border-red-400 text-red-900 text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm transform -rotate-6 whitespace-nowrap">
                         T <span v-if="data.tokens.tough > 1" class="ml-0.5">x{{data.tokens.tough}}</span>
+                    </div>
+                </div>
+
+                <div class="absolute bottom-0 -left-2 flex flex-col gap-1 z-20 pointer-events-none">
+                    <div v-for="n in (data.resource_physical || 0)" :key="'phys'+n" class="w-5 h-5 bg-red-600 rounded-full flex items-center justify-center border border-white shadow-md">
+                        <i class="fas fa-hand-fist text-white text-[9px]"></i>
+                    </div>
+                    <div v-for="n in (data.resource_energy || 0)" :key="'ener'+n" class="w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center border border-white shadow-md">
+                        <i class="fas fa-bolt text-yellow-900 text-[9px]"></i>
+                    </div>
+                    <div v-for="n in (data.resource_mental || 0)" :key="'ment'+n" class="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center border border-white shadow-md">
+                        <i class="fas fa-microchip text-white text-[9px]"></i>
+                    </div>
+                    <div v-for="n in (data.resource_wild || 0)" :key="'wild'+n" class="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center border border-white shadow-md">
+                        <i class="fas fa-star text-white text-[9px]"></i>
                     </div>
                 </div>
 
@@ -287,6 +373,10 @@
                         {{ data.currentHealth !== undefined ? data.currentHealth : data.health }}
                     </div>
                 </div>
+
+                <div v-if="data.type_code" class="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-gray-900 text-gray-100 text-[8px] px-2 py-0.5 rounded-full shadow-md uppercase font-bold tracking-widest whitespace-nowrap z-20 border border-gray-600">
+                    {{ data.type_code.replace(/_/g, ' ') }}
+                </div>
             </div>
         `
     };
@@ -294,12 +384,15 @@
     const GamePile = {
         props: ['data'],
         template: `
-            <div class="absolute w-32 h-44 rounded-lg flex flex-col border border-emerald-700 card-base bg-emerald-900 shadow-[-4px_4px_0_0_rgba(16,185,129,0.3),-8px_8px_0_0_rgba(16,185,129,0.1)] overflow-hidden">
-                <div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.2) 10px, rgba(255,255,255,0.2) 20px);"></div>
+            <div class="w-32 h-44 shrink-0 rounded-lg flex flex-col border card-base shadow-[-4px_4px_0_0_rgba(0,0,0,0.3),-8px_8px_0_0_rgba(0,0,0,0.1)] overflow-hidden relative"
+                 :class="data.isDiscard ? 'border-gray-500 bg-gray-700' : 'border-emerald-700 bg-emerald-900'">
+                <div class="absolute inset-0 opacity-20 pointer-events-none" :style="data.isDiscard ? '' : 'background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.2) 10px, rgba(255,255,255,0.2) 20px);'"></div>
                 <div class="flex-1 flex items-center justify-center flex-col z-10 drop-shadow-md p-1 text-center">
-                    <i class="fas fa-layer-group text-4xl text-emerald-400 mb-2"></i>
+                    <i class="fas" :class="[data.isDiscard ? 'fa-trash text-gray-400' : 'fa-layer-group text-emerald-400', 'text-4xl mb-2']"></i>
                     <span class="text-white font-black text-2xl tracking-tighter">{{ data.pileCards.length }}</span>
-                    <span class="text-emerald-300 font-bold text-[9px] tracking-wider uppercase mt-1 px-1 leading-tight">{{ data.owner ? data.owner + '\\nDeck' : 'Deck' }}</span>
+                    <span class="font-bold text-[9px] tracking-wider uppercase mt-1 px-1 leading-tight" :class="data.isDiscard ? 'text-gray-300' : 'text-emerald-300'">
+                        {{ data.owner ? data.owner + '\\n' : '' }}{{ data.isDiscard ? 'Discard' : 'Deck' }}
+                    </span>
                 </div>
             </div>
         `
@@ -351,7 +444,7 @@
                          :class="{ 'grayscale opacity-60': c.exhausted && !c.isPile }" 
                          :style="{ left: c.x + 'px', top: c.y + 'px', zIndex: c.isPile ? 50 : 'auto' }">
                         
-                        <game-pile v-if="c.isPile" :data="c" class="card-shadow hover:ring-2 ring-emerald-400"></game-pile>
+                        <game-pile v-if="c.isPile" :data="c" class="card-shadow hover:ring-2" :class="c.isDiscard ? 'ring-gray-400' : 'ring-emerald-400'"></game-pile>
                         <game-card v-else :data="c" class="card-shadow hover:ring-2 ring-blue-400"></game-card>
                         
                     </div>
@@ -382,6 +475,21 @@
                 x: 0,
                 y: 0,
                 card: null
+            });
+
+            // Browser State
+            const pileBrowser = ref({
+                isOpen: false,
+                pile: null,
+                searchQuery: ''
+            });
+
+            const browserMenu = ref({
+                isOpen: false,
+                x: 0,
+                y: 0,
+                card: null,
+                cardIndex: -1
             });
 
             const masterDatabase = ref([]);
@@ -438,6 +546,10 @@
                                 health: c.health,
                                 permanent: c.permanent,
                                 linked_to_code: c.linked_to_code,
+                                resource_physical: c.resource_physical,
+                                resource_energy: c.resource_energy,
+                                resource_mental: c.resource_mental,
+                                resource_wild: c.resource_wild,
                                 pack_names: c.pack_name ? [c.pack_name] : [] 
                             });
                         } else {
@@ -491,7 +603,6 @@
                         if (!res.ok) throw new Error("Network response was not ok");
                         const data = await res.json();
                         
-                        // Grab hero
                         if (data.hero_code) {
                             const hero = masterDatabase.value.find(c => c.code === data.hero_code);
                             if (hero) {
@@ -500,7 +611,6 @@
                             }
                         }
 
-                        // Grab slots
                         if (data.slots) {
                             for (const [code, qty] of Object.entries(data.slots)) {
                                 const cardMatch = masterDatabase.value.find(c => c.code === code);
@@ -510,7 +620,6 @@
                             }
                         }
                     } else {
-                        // Plain Text Parsing
                         const lines = importInput.value.split('\n').map(l => l.trim()).filter(l => l);
                         const regex = /^(\d+)x\s+(.+?)(?:\s+\((.+?)\))?$/;
 
@@ -523,7 +632,6 @@
                             }
                         }
 
-                        // Continue parsing the actual cards
                         for (let line of lines) {
                             const match = line.match(regex);
                             if (match) {
@@ -594,6 +702,7 @@
                     cards.value.push({
                         instanceId: generateId(),
                         isPile: true,
+                        isDiscard: false,
                         owner: heroName,
                         zone: targetZone,
                         x: centerX - 200,
@@ -612,13 +721,12 @@
 
                 const drawn = targetPile.pileCards.pop();
                 
-                // Spawn the drawn card next to the deck
                 cards.value.push({
                     ...drawn,
                     instanceId: generateId(),
-                    owner: drawn.owner || targetPile.owner, // FEATURE 5: pass owner string
+                    owner: drawn.owner || targetPile.owner, 
                     zone: targetPile.zone,
-                    x: targetPile.x + 140, // 140px right of the deck
+                    x: targetPile.x + 140, 
                     y: targetPile.y,
                     exhausted: false,
                     currentHealth: drawn.health !== undefined ? parseInt(drawn.health, 10) : undefined,
@@ -650,12 +758,128 @@
 
             const resetGame = () => cards.value = [];
 
+            // --- PILE BROWSER LOGIC ---
+            const filteredBrowserCards = computed(() => {
+                if (!pileBrowser.value.pile) return [];
+                const allCards = pileBrowser.value.pile.pileCards;
+                if (!pileBrowser.value.searchQuery) return allCards;
+                const q = pileBrowser.value.searchQuery.toLowerCase();
+                return allCards.filter(c => c.name.toLowerCase().includes(q) || (c.traits && c.traits.toLowerCase().includes(q)));
+            });
+
+            const openPileBrowser = (pile) => {
+                pileBrowser.value.pile = pile;
+                pileBrowser.value.searchQuery = '';
+                pileBrowser.value.isOpen = true;
+            };
+
+            const openPileBrowserFromMenu = () => {
+                const pile = contextMenu.value.card;
+                closeContextMenu();
+                openPileBrowser(pile);
+            };
+
+            const closePileBrowser = () => {
+                pileBrowser.value.isOpen = false;
+                pileBrowser.value.pile = null;
+                pileBrowser.value.searchQuery = '';
+                closeBrowserMenu();
+            };
+
+            const shuffleBrowserPile = () => {
+                if(pileBrowser.value.pile) {
+                    pileBrowser.value.pile.pileCards = shuffleArray([...pileBrowser.value.pile.pileCards]);
+                }
+            };
+
+            const openBrowserMenu = (e, card, index) => {
+                let finalX = e.clientX;
+                let finalY = e.clientY;
+                const menuWidth = 220;
+                const menuHeight = 250;
+                
+                if (finalX + menuWidth > window.innerWidth) finalX = window.innerWidth - menuWidth - 10;
+                if (finalY + menuHeight > window.innerHeight) finalY = window.innerHeight - menuHeight - 10;
+
+                browserMenu.value = {
+                    isOpen: true,
+                    x: finalX,
+                    y: finalY,
+                    card: card,
+                    cardIndex: index
+                };
+            };
+
+            const closeBrowserMenu = () => {
+                browserMenu.value.isOpen = false;
+                browserMenu.value.card = null;
+                browserMenu.value.cardIndex = -1;
+            };
+
+            const moveBrowserCard = (destination) => {
+                if (!pileBrowser.value.pile || !browserMenu.value.card) return;
+                
+                const cardToMove = browserMenu.value.card;
+                const actualIndex = pileBrowser.value.pile.pileCards.findIndex(c => c === cardToMove);
+                if (actualIndex === -1) return;
+
+                const extractedCard = pileBrowser.value.pile.pileCards.splice(actualIndex, 1)[0];
+                const sourcePile = pileBrowser.value.pile;
+
+                if (destination === 'deck' || destination === 'discard') {
+                    const targetIsDiscard = destination === 'discard';
+                    let targetPile = cards.value.find(c => c.isPile && c.isDiscard === targetIsDiscard && c.owner === sourcePile.owner);
+                    
+                    if (!targetPile) {
+                        const offset = targetIsDiscard ? -140 : 140; 
+                        targetPile = {
+                            instanceId: generateId(),
+                            isPile: true,
+                            isDiscard: targetIsDiscard,
+                            owner: sourcePile.owner,
+                            zone: sourcePile.zone,
+                            x: sourcePile.x + offset,
+                            y: sourcePile.y,
+                            pileCards: []
+                        };
+                        cards.value.push(targetPile);
+                    }
+
+                    extractedCard.exhausted = false;
+                    extractedCard.genericCounters = 0;
+                    extractedCard.tokens = { confused: 0, stunned: 0, tough: 0 };
+                    if (extractedCard.health !== undefined) extractedCard.currentHealth = parseInt(extractedCard.health, 10);
+                    
+                    targetPile.pileCards.push(extractedCard);
+
+                } else {
+                    const vp = viewports.value[destination];
+                    const rect = document.getElementById(destination).getBoundingClientRect();
+                    const centerX = (rect.width / 2 - vp.x) / vp.scale - 64;
+                    const centerY = (rect.height / 2 - vp.y) / vp.scale - 88;
+
+                    cards.value.push({
+                        ...extractedCard,
+                        instanceId: generateId(),
+                        zone: destination,
+                        x: centerX,
+                        y: centerY,
+                        exhausted: false,
+                        currentHealth: extractedCard.health !== undefined ? parseInt(extractedCard.health, 10) : undefined,
+                        genericCounters: 0,
+                        tokens: { confused: 0, stunned: 0, tough: 0 }
+                    });
+                }
+                
+                closeBrowserMenu();
+            };
+
             // --- CONTEXT MENU LOGIC ---
             const openContextMenu = (x, y, card) => {
                 let finalX = x;
                 let finalY = y;
                 const menuWidth = 220;
-                const expectedHeight = card.isPile ? 100 : 360; 
+                const expectedHeight = card.isPile ? 160 : 360; 
 
                 if (x + menuWidth > window.innerWidth) finalX = window.innerWidth - menuWidth - 10;
                 if (y + expectedHeight > window.innerHeight) finalY = window.innerHeight - expectedHeight - 10;
@@ -671,6 +895,15 @@
             const closeContextMenu = () => {
                 contextMenu.value.isOpen = false;
                 contextMenu.value.card = null;
+            };
+
+            const shuffleContextMenuPile = () => {
+                if (!contextMenu.value.card || !contextMenu.value.card.isPile) return;
+                const target = cards.value.find(c => c.instanceId === contextMenu.value.card.instanceId);
+                if (target) {
+                    target.pileCards = shuffleArray([...target.pileCards]);
+                }
+                closeContextMenu();
             };
 
             const canFlip = (card) => {
@@ -713,9 +946,58 @@
 
             const deleteCard = () => {
                 if (!contextMenu.value.card) return;
-                const index = cards.value.findIndex(c => c.instanceId === contextMenu.value.card.instanceId);
+                const card = contextMenu.value.card;
+                const index = cards.value.findIndex(c => c.instanceId === card.instanceId);
+                
                 if (index !== -1) {
-                    cards.value.splice(index, 1);
+                    if (card.isPile && !card.isDiscard) {
+                        const ownerToDelete = card.owner;
+                        cards.value.splice(index, 1);
+                        if (ownerToDelete) {
+                            cards.value = cards.value.filter(c => c.owner !== ownerToDelete);
+                        }
+                    } 
+                    else if (card.owner && !card.isPile) {
+                        const deckPile = cards.value.find(c => c.isPile && !c.isDiscard && c.owner === card.owner);
+                        
+                        if (deckPile) {
+                            let discardPile = cards.value.find(c => c.isPile && c.isDiscard && c.owner === card.owner);
+                            
+                            if (!discardPile) {
+                                discardPile = {
+                                    instanceId: generateId(),
+                                    isPile: true,
+                                    isDiscard: true,
+                                    owner: card.owner,
+                                    zone: deckPile.zone,
+                                    x: deckPile.x - 140, 
+                                    y: deckPile.y,
+                                    pileCards: []
+                                };
+                                cards.value.push(discardPile);
+                            } else {
+                                discardPile.x = deckPile.x - 140;
+                                discardPile.y = deckPile.y;
+                                discardPile.zone = deckPile.zone;
+                            }
+                            
+                            const cardToDiscard = { ...card };
+                            cardToDiscard.exhausted = false;
+                            cardToDiscard.genericCounters = 0;
+                            cardToDiscard.tokens = { confused: 0, stunned: 0, tough: 0 };
+                            if (cardToDiscard.health !== undefined) {
+                                cardToDiscard.currentHealth = parseInt(cardToDiscard.health, 10);
+                            }
+                            
+                            discardPile.pileCards.push(cardToDiscard);
+                            cards.value.splice(index, 1);
+                        } else {
+                            cards.value.splice(index, 1);
+                        }
+                    } 
+                    else {
+                        cards.value.splice(index, 1);
+                    }
                 }
                 closeContextMenu();
             };
@@ -739,6 +1021,7 @@
                         cards.value[cardIndex] = {
                             ...nextSide,
                             instanceId: existingCard.instanceId,
+                            owner: existingCard.owner,
                             zone: existingCard.zone,
                             x: existingCard.x,
                             y: existingCard.y,
@@ -942,17 +1225,19 @@
             const handleGlobalPointerUp = (e) => {
                 clearTimeout(longPressTimer);
 
-                // Check for single tap
                 if (dragState.value.pending && !dragState.value.isActive) {
                     if (dragState.value.card.isPile) {
-                        drawCardFromPile(dragState.value.card);
+                        if (dragState.value.card.isDiscard) {
+                            openPileBrowser(dragState.value.card);
+                        } else {
+                            drawCardFromPile(dragState.value.card);
+                        }
                     } else {
                         toggleExhaust(dragState.value.card);
                     }
                     dragState.value.pending = false;
                     dragState.value.card = null;
                 } 
-                // Check for completed drag
                 else if (dragState.value.isActive) {
                     const zones = ['villain', 'play', 'hand'];
                     let targetZone = dragState.value.startZone;
@@ -1002,9 +1287,11 @@
             return {
                 viewports, dragState, resetGame,
                 masterDatabase, dbSyncing, syncDatabase, isVaultOpen, vaultSearch, filteredVault, spawnCard, getColors,
-                contextMenu, closeContextMenu, canFlip, flipCard,
+                contextMenu, closeContextMenu, canFlip, flipCard, shuffleContextMenuPile,
                 isCharacter, modifyHealth, modifyCounters, modifyToken, deleteCard,
-                showImportModal, importInput, isImporting, processImport
+                showImportModal, importInput, isImporting, processImport,
+                pileBrowser, openPileBrowserFromMenu, closePileBrowser, shuffleBrowserPile, filteredBrowserCards,
+                browserMenu, openBrowserMenu, closeBrowserMenu, moveBrowserCard
             };
         }
     });
