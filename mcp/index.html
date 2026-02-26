@@ -50,14 +50,12 @@
     
     <div class="h-12 bg-gray-800 border-b border-gray-600 flex items-center justify-between px-4 z-[70] shadow-md flex-shrink-0 relative">
         <div class="font-bold text-lg tracking-tighter">
-            <span class="text-red-500">MARVEL</span> <span class="text-white">SANDBOX</span>
+            <span class="text-red-500">MARVEL CHAMPIONS</span> <span class="text-white">PLAYMAT</span>
         </div>
         <div class="flex gap-3 items-center">
-            <span v-if="dbSyncing" class="text-xs text-blue-400 animate-pulse"><i class="fas fa-spinner fa-spin mr-1"></i> Syncing...</span>
-            <span v-else class="text-xs text-gray-400">DB: {{ masterDatabase.length }} cards</span>
             
-            <button @click="syncDatabase" :disabled="dbSyncing" class="text-xs bg-blue-700 hover:bg-blue-600 disabled:opacity-50 transition px-3 py-1.5 rounded text-white flex items-center gap-2">
-                <i class="fas fa-sync-alt"></i> Sync DB
+            <button @click="showOptionsModal = true" class="text-xs bg-gray-700 hover:bg-gray-600 transition px-3 py-1.5 rounded text-white flex items-center gap-2">
+                <i class="fas fa-cog"></i> Options
             </button>
             <button @click="showImportModal = true" class="text-xs bg-emerald-700 hover:bg-emerald-600 transition px-3 py-1.5 rounded text-white flex items-center gap-2">
                 <i class="fas fa-file-import"></i> Import Deck
@@ -69,6 +67,54 @@
             <button @click="isVaultOpen = !isVaultOpen" :class="isVaultOpen ? 'bg-red-600 hover:bg-red-500' : 'bg-indigo-600 hover:bg-indigo-500'" class="text-xs transition px-3 py-1.5 rounded text-white flex items-center gap-2 font-bold w-28 justify-center">
                 <i :class="isVaultOpen ? 'fas fa-times' : 'fas fa-box-open'"></i> {{ isVaultOpen ? 'Close Vault' : 'Card Vault' }}
             </button>
+        </div>
+    </div>
+
+    <div v-if="showOptionsModal" class="fixed inset-0 z-[300] bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-gray-800 border border-gray-600 rounded-lg shadow-2xl w-full max-w-md flex flex-col">
+            <div class="px-4 py-3 border-b border-gray-700 flex justify-between items-center bg-gray-900 rounded-t-lg">
+                <h3 class="font-bold text-white"><i class="fas fa-cog text-blue-400 mr-2"></i> Options</h3>
+                <button @click="showOptionsModal = false" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="p-5 flex flex-col gap-5">
+                <div class="flex items-center justify-between bg-gray-900 p-3 rounded-lg border border-gray-700 shadow-inner">
+                    <div class="flex flex-col">
+                        <span class="text-white text-sm font-bold">Card Database</span>
+                        <span v-if="dbSyncing" class="text-xs text-blue-400 animate-pulse"><i class="fas fa-spinner fa-spin mr-1"></i> Syncing...</span>
+                        <span v-else class="text-xs text-gray-400">{{ masterDatabase.length }} cards loaded</span>
+                    </div>
+                    <button @click="syncDatabase" :disabled="dbSyncing" class="text-xs bg-blue-700 hover:bg-blue-600 disabled:opacity-50 transition px-4 py-2 rounded text-white flex items-center gap-2 shadow">
+                        <i class="fas fa-sync-alt" :class="{'fa-spin': dbSyncing}"></i> Sync DB
+                    </button>
+                </div>
+
+                <div class="flex flex-col gap-4">
+                    <div class="flex items-center justify-between border-b border-gray-700 pb-4">
+                        <div class="flex flex-col pr-4">
+                            <span class="text-white text-sm font-bold mb-0.5">Lock to Grid</span>
+                            <span class="text-xs text-gray-400">Snap dropped cards precisely to the background dot pattern.</span>
+                        </div>
+                        <button @click="options.lockToGrid = !options.lockToGrid" class="w-12 h-6 rounded-full transition-colors relative flex-shrink-0 focus:outline-none" :class="options.lockToGrid ? 'bg-emerald-500' : 'bg-gray-600'">
+                            <span class="absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow" :class="options.lockToGrid ? 'translate-x-6' : 'translate-x-0'"></span>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <div class="flex flex-col pr-4">
+                            <span class="text-white text-sm font-bold mb-0.5">Hide Villain Zone</span>
+                            <span class="text-xs text-gray-400">Remove the top zone to expand the available Play Area and Hand space.</span>
+                        </div>
+                        <button @click="options.hideVillainZone = !options.hideVillainZone" class="w-12 h-6 rounded-full transition-colors relative flex-shrink-0 focus:outline-none" :class="options.hideVillainZone ? 'bg-emerald-500' : 'bg-gray-600'">
+                            <span class="absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform shadow" :class="options.hideVillainZone ? 'translate-x-6' : 'translate-x-0'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-4 py-3 bg-gray-900 border-t border-gray-700 rounded-b-lg flex justify-end">
+                <button @click="showOptionsModal = false" class="px-6 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-white font-bold rounded shadow transition">Done</button>
+            </div>
         </div>
     </div>
 
@@ -154,9 +200,9 @@
     </div>
 
     <div class="flex-1 flex flex-col min-h-0 relative">
-        <game-zone id="villain" label="VILLAIN" class="h-1/4 bg-gray-800/50"></game-zone>
+        <game-zone v-if="!options.hideVillainZone" id="villain" label="VILLAIN" class="h-1/4 bg-gray-800/50"></game-zone>
         <game-zone id="play" label="PLAY AREA" class="flex-1 bg-gray-800/30"></game-zone>
-        <game-zone id="hand" label="HAND" class="h-1/4 bg-gray-800/50"></game-zone>
+        <game-zone id="hand" label="HAND" :class="options.hideVillainZone ? 'h-1/3' : 'h-1/4'" class="bg-gray-800/50"></game-zone>
     </div>
 
     <div v-if="dragState.isActive && dragState.card" class="fixed inset-0 pointer-events-none z-[100]">
@@ -199,7 +245,7 @@
                     class="px-4 py-3 text-left text-sm text-gray-200 hover:text-white hover:bg-indigo-600 active:bg-indigo-700 flex items-center gap-3 border-b border-gray-700 transition-colors">
                 <i class="fas fa-sync-alt w-4 text-center"></i> Flip Card
             </button>
-            
+             
             <div v-if="isCharacter(contextMenu.card)" class="px-4 py-3 border-b border-gray-700 flex items-center justify-between hover:bg-gray-700/30 transition-colors">
                 <span class="text-sm text-gray-300 flex items-center gap-2"><i class="fas fa-heart text-red-500 w-4 text-center"></i> Health</span>
                 <div class="flex items-center gap-3 bg-gray-900 rounded px-2 py-1 shadow-inner border border-gray-600">
@@ -492,6 +538,13 @@
                 cardIndex: -1
             });
 
+            // Config State
+            const showOptionsModal = ref(false);
+            const options = ref({
+                lockToGrid: false,
+                hideVillainZone: false
+            });
+
             const masterDatabase = ref([]);
             const dbSyncing = ref(false);
             const isVaultOpen = ref(false);
@@ -699,14 +752,22 @@
                 });
 
                 if (restOfDeck.length > 0) {
+                    let destX = centerX - 200;
+                    let destY = centerY - 88;
+                    
+                    if (options.value.lockToGrid) {
+                        destX = Math.round(destX / 20) * 20;
+                        destY = Math.round(destY / 20) * 20;
+                    }
+
                     cards.value.push({
                         instanceId: generateId(),
                         isPile: true,
                         isDiscard: false,
                         owner: heroName,
                         zone: targetZone,
-                        x: centerX - 200,
-                        y: centerY - 88,
+                        x: destX,
+                        y: destY,
                         pileCards: restOfDeck
                     });
                 }
@@ -721,13 +782,21 @@
 
                 const drawn = targetPile.pileCards.pop();
                 
+                let targetX = targetPile.x + 140;
+                let targetY = targetPile.y;
+                
+                if (options.value.lockToGrid) {
+                    targetX = Math.round(targetX / 20) * 20;
+                    targetY = Math.round(targetY / 20) * 20;
+                }
+
                 cards.value.push({
                     ...drawn,
                     instanceId: generateId(),
                     owner: drawn.owner || targetPile.owner, 
                     zone: targetPile.zone,
-                    x: targetPile.x + 140, 
-                    y: targetPile.y,
+                    x: targetX, 
+                    y: targetY,
                     exhausted: false,
                     currentHealth: drawn.health !== undefined ? parseInt(drawn.health, 10) : undefined,
                     genericCounters: 0,
@@ -740,8 +809,13 @@
                 const vp = viewports.value[targetZone];
                 const rect = document.getElementById(targetZone).getBoundingClientRect();
                 
-                const centerX = forceX !== null ? forceX : (rect.width / 2 - vp.x) / vp.scale - 64;
-                const centerY = forceY !== null ? forceY : (rect.height / 2 - vp.y) / vp.scale - 88;
+                let centerX = forceX !== null ? forceX : (rect.width / 2 - vp.x) / vp.scale - 64;
+                let centerY = forceY !== null ? forceY : (rect.height / 2 - vp.y) / vp.scale - 88;
+
+                if (options.value.lockToGrid) {
+                    centerX = Math.round(centerX / 20) * 20;
+                    centerY = Math.round(centerY / 20) * 20;
+                }
 
                 cards.value.push({
                     ...baseCard,
@@ -831,15 +905,23 @@
                     let targetPile = cards.value.find(c => c.isPile && c.isDiscard === targetIsDiscard && c.owner === sourcePile.owner);
                     
                     if (!targetPile) {
-                        const offset = targetIsDiscard ? -140 : 140; 
+                        let offset = targetIsDiscard ? -140 : 140; 
+                        let newPileX = sourcePile.x + offset;
+                        let newPileY = sourcePile.y;
+                        
+                        if (options.value.lockToGrid) {
+                            newPileX = Math.round(newPileX / 20) * 20;
+                            newPileY = Math.round(newPileY / 20) * 20;
+                        }
+
                         targetPile = {
                             instanceId: generateId(),
                             isPile: true,
                             isDiscard: targetIsDiscard,
                             owner: sourcePile.owner,
                             zone: sourcePile.zone,
-                            x: sourcePile.x + offset,
-                            y: sourcePile.y,
+                            x: newPileX,
+                            y: newPileY,
                             pileCards: []
                         };
                         cards.value.push(targetPile);
@@ -853,22 +935,7 @@
                     targetPile.pileCards.push(extractedCard);
 
                 } else {
-                    const vp = viewports.value[destination];
-                    const rect = document.getElementById(destination).getBoundingClientRect();
-                    const centerX = (rect.width / 2 - vp.x) / vp.scale - 64;
-                    const centerY = (rect.height / 2 - vp.y) / vp.scale - 88;
-
-                    cards.value.push({
-                        ...extractedCard,
-                        instanceId: generateId(),
-                        zone: destination,
-                        x: centerX,
-                        y: centerY,
-                        exhausted: false,
-                        currentHealth: extractedCard.health !== undefined ? parseInt(extractedCard.health, 10) : undefined,
-                        genericCounters: 0,
-                        tokens: { confused: 0, stunned: 0, tough: 0 }
-                    });
+                    spawnCard(extractedCard, destination);
                 }
                 
                 closeBrowserMenu();
@@ -1046,6 +1113,11 @@
                     syncDatabase();
                 }
 
+                const savedOptions = localStorage.getItem('mc_options');
+                if (savedOptions) {
+                    options.value = { ...options.value, ...JSON.parse(savedOptions) };
+                }
+
                 const preventDefault = (e) => e.preventDefault();
                 const captureOpts = { passive: false, capture: true };
                 
@@ -1067,6 +1139,7 @@
             });
 
             watch(cards, (newVal) => localStorage.setItem('mc_cards', JSON.stringify(newVal)), { deep: true });
+            watch(options, (newVal) => localStorage.setItem('mc_options', JSON.stringify(newVal)), { deep: true });
 
             const applyZoom = (zoneId, scaleMultiplier, pointerX, pointerY) => {
                 const vp = viewports.value[zoneId];
@@ -1243,7 +1316,9 @@
                     let targetZone = dragState.value.startZone;
                     
                     for (const z of zones) {
-                        const rect = document.getElementById(z).getBoundingClientRect();
+                        const el = document.getElementById(z);
+                        if (!el) continue; // Skip zone if it's disabled via Options UI
+                        const rect = el.getBoundingClientRect();
                         if (e.clientX >= rect.left && e.clientX <= rect.right && 
                             e.clientY >= rect.top && e.clientY <= rect.bottom) {
                             targetZone = z;
@@ -1253,8 +1328,14 @@
 
                     const vp = viewports.value[targetZone];
                     const targetRect = document.getElementById(targetZone).getBoundingClientRect();
-                    const localX = (dragState.value.currentX - targetRect.left - vp.x) / vp.scale;
-                    const localY = (dragState.value.currentY - targetRect.top - vp.y) / vp.scale;
+                    
+                    let localX = (dragState.value.currentX - targetRect.left - vp.x) / vp.scale;
+                    let localY = (dragState.value.currentY - targetRect.top - vp.y) / vp.scale;
+
+                    if (options.value.lockToGrid) {
+                        localX = Math.round(localX / 20) * 20;
+                        localY = Math.round(localY / 20) * 20;
+                    }
 
                     const cardIndex = cards.value.findIndex(c => c.instanceId === dragState.value.card.instanceId);
                     if (cardIndex !== -1) {
@@ -1291,7 +1372,8 @@
                 isCharacter, modifyHealth, modifyCounters, modifyToken, deleteCard,
                 showImportModal, importInput, isImporting, processImport,
                 pileBrowser, openPileBrowserFromMenu, closePileBrowser, shuffleBrowserPile, filteredBrowserCards,
-                browserMenu, openBrowserMenu, closeBrowserMenu, moveBrowserCard
+                browserMenu, openBrowserMenu, closeBrowserMenu, moveBrowserCard,
+                options, showOptionsModal
             };
         }
     });
