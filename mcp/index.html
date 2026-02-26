@@ -118,7 +118,7 @@
         <div class="flex-1 bg-gray-900 border border-gray-600 rounded-b-lg p-6 overflow-y-auto shadow-inner" @pointerdown="closeBrowserMenu">
             <div v-if="filteredBrowserCards.length === 0" class="text-center text-gray-500 mt-10 italic">No matching cards found.</div>
             <div class="flex flex-wrap gap-4 justify-center">
-                <div v-for="(card, idx) in filteredBrowserCards" :key="idx" 
+                <div v-for="(card, idx) in filteredBrowserCards.slice().reverse()" :key="idx" 
                      @pointerdown.stop.prevent="openBrowserMenu($event, card, idx)"
                      class="cursor-pointer hover:-translate-y-2 transition-transform duration-200 group">
                     <game-card :data="card" class="card-shadow group-hover:ring-2 ring-emerald-400"></game-card>
