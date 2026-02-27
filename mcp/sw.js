@@ -1,5 +1,5 @@
 // CHANGE THIS STRING whenever you update your app to force clients to clear old caches!
-const CACHE_NAME = 'mc-playmat-v8'; 
+const CACHE_NAME = 'mc-playmat-v9'; 
 
 // 1. INSTALL: Cache the bare minimum needed to boot offline
 self.addEventListener('install', (e) => {
