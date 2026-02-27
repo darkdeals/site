@@ -237,6 +237,9 @@
             <button @click="shuffleContextMenuPile" class="px-4 py-3 text-left text-sm text-blue-400 hover:text-white hover:bg-blue-600 active:bg-blue-700 flex items-center gap-3 border-b border-gray-700 transition-colors">
                 <i class="fas fa-random w-4 text-center"></i> Shuffle Pile
             </button>
+            <button v-if="contextMenu.card.isDiscard" @click="shuffleDiscardIntoDeck" class="px-4 py-3 text-left text-sm text-purple-400 hover:text-white hover:bg-purple-600 active:bg-purple-700 flex items-center gap-3 border-b border-gray-700 transition-colors">
+                <i class="fas fa-undo w-4 text-center"></i> Shuffle into Deck
+            </button>
         </template>
 
         <template v-if="!contextMenu.card.isPile">
@@ -790,6 +793,19 @@
                     targetY = Math.round(targetY / 20) * 20;
                 }
 
+                // Check for collision and shift to the right until an empty spot is found
+                let spotTaken = true;
+                while (spotTaken) {
+                    spotTaken = cards.value.some(c => 
+                        c.zone === targetPile.zone && 
+                        Math.abs(c.x - targetX) < 10 && 
+                        Math.abs(c.y - targetY) < 10
+                    );
+                    if (spotTaken) {
+                        targetX += 140;
+                    }
+                }
+
                 cards.value.push({
                     ...drawn,
                     instanceId: generateId(),
@@ -970,6 +986,37 @@
                 if (target) {
                     target.pileCards = shuffleArray([...target.pileCards]);
                 }
+                closeContextMenu();
+            };
+
+            const shuffleDiscardIntoDeck = () => {
+                if (!contextMenu.value.card || !contextMenu.value.card.isPile || !contextMenu.value.card.isDiscard) return;
+                
+                const discardPile = cards.value.find(c => c.instanceId === contextMenu.value.card.instanceId);
+                if (!discardPile) return;
+
+                let deckPile = cards.value.find(c => c.isPile && !c.isDiscard && c.owner === discardPile.owner);
+
+                // Create the deck pile if it doesn't currently exist
+                if (!deckPile) {
+                    deckPile = {
+                        instanceId: generateId(),
+                        isPile: true,
+                        isDiscard: false,
+                        owner: discardPile.owner,
+                        zone: discardPile.zone,
+                        x: discardPile.x - 140,
+                        y: discardPile.y,
+                        pileCards: []
+                    };
+                    cards.value.push(deckPile);
+                }
+
+                // Push all discards into the deck pile, empty discard pile, and shuffle
+                deckPile.pileCards.push(...discardPile.pileCards);
+                discardPile.pileCards = [];
+                deckPile.pileCards = shuffleArray([...deckPile.pileCards]);
+
                 closeContextMenu();
             };
 
@@ -1309,6 +1356,7 @@
                         toggleExhaust(dragState.value.card);
                     }
                     dragState.value.pending = false;
+                    dragState.value.isActive = false;
                     dragState.value.card = null;
                 } 
                 else if (dragState.value.isActive) {
@@ -1335,6 +1383,48 @@
                     if (options.value.lockToGrid) {
                         localX = Math.round(localX / 20) * 20;
                         localY = Math.round(localY / 20) * 20;
+                    }
+
+                    if (!dragState.value.card.isPile) {
+                        // Calculate center of dragged card in target zone coordinate space
+                        // Card is width 32 (128px) and height 44 (176px)
+                        const dropCenterX = localX + 64; 
+                        const dropCenterY = localY + 88;
+
+                        // Check if center point intersects with any pile in the target zone
+                        const targetPileIndex = cards.value.findIndex(c => {
+                            if (!c.isPile || c.zone !== targetZone) return false;
+                            const pileRight = c.x + 128;
+                            const pileBottom = c.y + 176;
+                            
+                            return dropCenterX >= c.x && dropCenterX <= pileRight && 
+                                   dropCenterY >= c.y && dropCenterY <= pileBottom;
+                        });
+
+                        if (targetPileIndex !== -1) {
+                            const targetPile = cards.value[targetPileIndex];
+                            const sourceCardIndex = cards.value.findIndex(c => c.instanceId === dragState.value.card.instanceId);
+                            
+                            if (sourceCardIndex !== -1) {
+                                // Clone card and clean up its state
+                                const cardToAdd = { ...cards.value[sourceCardIndex] };
+                                cardToAdd.exhausted = false;
+                                cardToAdd.genericCounters = 0;
+                                cardToAdd.tokens = { confused: 0, stunned: 0, tough: 0 };
+                                if (cardToAdd.health !== undefined) cardToAdd.currentHealth = parseInt(cardToAdd.health, 10);
+                                
+                                // Push to pile and remove from main array
+                                targetPile.pileCards.push(cardToAdd);
+                                cards.value.splice(sourceCardIndex, 1);
+                            }
+
+                            // Cleanup drag state and return early
+                            dragState.value.pending = false;
+                            dragState.value.isActive = false;
+                            dragState.value.card = null;
+                            pointers.delete(e.pointerId);
+                            return;
+                        }
                     }
 
                     const cardIndex = cards.value.findIndex(c => c.instanceId === dragState.value.card.instanceId);
@@ -1368,7 +1458,7 @@
             return {
                 viewports, dragState, resetGame,
                 masterDatabase, dbSyncing, syncDatabase, isVaultOpen, vaultSearch, filteredVault, spawnCard, getColors,
-                contextMenu, closeContextMenu, canFlip, flipCard, shuffleContextMenuPile,
+                contextMenu, closeContextMenu, canFlip, flipCard, shuffleContextMenuPile, shuffleDiscardIntoDeck,
                 isCharacter, modifyHealth, modifyCounters, modifyToken, deleteCard,
                 showImportModal, importInput, isImporting, processImport,
                 pileBrowser, openPileBrowserFromMenu, closePileBrowser, shuffleBrowserPile, filteredBrowserCards,
